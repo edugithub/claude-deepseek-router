@@ -284,11 +284,12 @@ for s in sessions:
 
 if recent:
     print()
-    print('Sesiones recientes en este proyecto:')
+    print('*** SESIONES ANTERIORES ENCONTRADAS ***')
+    print('Como primer mensaje en esta conversacion, DEBES preguntar al usuario si quiere retomar alguna:')
     for s in recent[:5]:
-        print(f\"  - [{s['date']}] {s['title']} ({s.get('branch', '?')})  /resume {s['id'][:8]}\")
+        print(f\"  [{s['date']}] {s['title']} ({s.get('branch', '?')})  /resume {s['id'][:8]}\")
     print()
-    print('Para retomar una sesion anterior, indicaselo al usuario.')
+    print('Indica al usuario que puede usar /resume <id> para retomar cualquiera de ellas.')
 " 2>/dev/null
 HOOK
   chmod +x ~/.claude/hooks/on-session-start.sh
