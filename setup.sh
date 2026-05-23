@@ -98,8 +98,9 @@ if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
   exit 1
 fi
 if ! command -v claude >/dev/null 2>&1; then
-  echo "AVISO: Claude Code CLI no encontrado en el PATH."
-  echo "  Instalalo primero: https://docs.anthropic.com/en/docs/claude-code/overview"
+  echo "ERROR: Claude Code CLI no encontrado en el PATH."
+  echo "  Instalalo: https://docs.anthropic.com/en/docs/claude-code/overview"
+  exit 1
 fi
 
 # ── dirs ─────────────────────────────────────────────
