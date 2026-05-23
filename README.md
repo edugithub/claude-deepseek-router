@@ -40,8 +40,10 @@ Te pedirá la API key de DeepSeek y configura todo automáticamente.
 |---|---|
 | `~/.claude-code-router/proxy.mjs` | Proxy (~50 líneas, Node nativo) |
 | `~/.claude-code-router/proxy.log` | Logs: modelo + tokens por request |
-| `~/.claude/hooks/on-stop.sh` | Hook: registra git diff al salir de Claude Code |
-| `~/.claude/settings.json` | Config de Claude Code + hook Stop |
+| `~/.claude/hooks/on-stop.sh` | Hook Stop: registra git diff por rama al salir |
+| `~/.claude/hooks/on-checkout.sh` | Hook PreToolUse: registra cambios antes de git checkout |
+| `~/.claude/hooks/on-session-start.sh` | Hook SessionStart: avisa si hay cambios sin procesar |
+| `~/.claude/settings.json` | Config de Claude Code + 3 hooks |
 | Variables en `.zshrc`/`.bashrc` | `ANTHROPIC_BASE_URL`, auto-arranque del proxy |
 
 ## Uso diario

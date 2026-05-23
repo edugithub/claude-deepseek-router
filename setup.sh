@@ -14,7 +14,10 @@ Qué hace:
   1. Crea el proxy de enrutamiento (~/.claude-code-router/proxy.mjs)
   2. Configura variables en .zshrc/.bashrc (ANTHROPIC_BASE_URL, etc.)
   3. Añade auto-arranque del proxy al abrir terminal
-  4. (Opcional) Instala hook Stop + change-log entre sesiones
+  4. (Opcional) Instala 3 hooks:
+     - Stop: registra cambios al salir (por rama)
+     - SessionStart: avisa si hay cambios sin procesar para CLAUDE.md
+     - PreToolUse: registra cambios antes de git checkout
 
 Requisitos: Node.js >= 18, Claude Code CLI, DeepSeek API key
 EOF
@@ -102,26 +105,61 @@ const server = http.createServer(async (req, res) => {
 server.listen(3456, () => process.stderr.write("proxy → http://127.0.0.1:3456\n"));
 PROXY
 
-# ── Stop hook (change log) ───────────────────────────
-cat > ~/.claude/hooks/on-stop.sh <<'HOOK'
+# ── Hooks ────────────────────────────────────────────
+if $NO_HOOKS; then
+  echo "Saltando instalacion de hooks (--no-hooks)"
+else
+  mkdir -p ~/.claude/hooks
+
+  # on-stop: registra cambios al salir (por rama)
+  cat > ~/.claude/hooks/on-stop.sh <<'HOOK'
 #!/bin/bash
-# Registra cambios sin commit en el directorio actual
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 LOG="$ROOT/.claude-change-log.md"
+BRANCH=$(git branch --show-current 2>/dev/null)
 DATE=$(date '+%Y-%m-%d %H:%M')
 if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-  echo "## $DATE" >> "$LOG"
+  echo "## $DATE — $BRANCH" >> "$LOG"
   echo '```' >> "$LOG"
   git diff --stat HEAD 2>/dev/null >> "$LOG"
   echo '```' >> "$LOG"
   echo "" >> "$LOG"
 fi
 HOOK
-chmod +x ~/.claude/hooks/on-stop.sh
+  chmod +x ~/.claude/hooks/on-stop.sh
 
-# ── settings.json ────────────────────────────────────
-[ -f ~/.claude/settings.json ] && cp ~/.claude/settings.json ~/.claude/settings.json.bak
-cat > ~/.claude/settings.json <<'SETTINGS'
+  # on-checkout: registra cambios antes de cambiar de rama
+  cat > ~/.claude/hooks/on-checkout.sh <<'HOOK'
+#!/bin/bash
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+LOG="$ROOT/.claude-change-log.md"
+BRANCH=$(git branch --show-current 2>/dev/null)
+DATE=$(date '+%Y-%m-%d %H:%M')
+if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+  echo "## $DATE — $BRANCH (checkout)" >> "$LOG"
+  echo '```' >> "$LOG"
+  git diff --stat HEAD 2>/dev/null >> "$LOG"
+  echo '```' >> "$LOG"
+  echo "" >> "$LOG"
+fi
+HOOK
+  chmod +x ~/.claude/hooks/on-checkout.sh
+
+  # on-session-start: avisa si hay cambios sin procesar
+  cat > ~/.claude/hooks/on-session-start.sh <<'HOOK'
+#!/bin/bash
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+CHANGELOG="$ROOT/.claude-change-log.md"
+if [ -f "$CHANGELOG" ] && [ "$(wc -l < "$CHANGELOG")" -gt 0 ]; then
+  echo "AVISO: Hay cambios registrados en .claude-change-log.md."
+  echo "Revisa el change log y actualiza CLAUDE.md con lo relevante."
+fi
+HOOK
+  chmod +x ~/.claude/hooks/on-session-start.sh
+
+  # settings.json con los 3 hooks
+  [ -f ~/.claude/settings.json ] && cp ~/.claude/settings.json ~/.claude/settings.json.bak
+  cat > ~/.claude/settings.json <<'SETTINGS'
 {
   "theme": "auto",
   "hooks": {
@@ -135,10 +173,34 @@ cat > ~/.claude/settings.json <<'SETTINGS'
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/on-session-start.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "if": "Bash(git checkout *)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/on-checkout.sh"
+          }
+        ]
+      }
     ]
   }
 }
 SETTINGS
+fi
 
 # ── .zshrc / .bashrc ─────────────────────────────────
 RC=""
