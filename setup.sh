@@ -87,6 +87,21 @@ if ! $FLAGS_SET && ! $DRY_RUN; then
   echo ""
 fi
 
+# ── requisitos ──────────────────────────────────────
+if ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: Node.js no encontrado. Instala Node.js >= 18."
+  exit 1
+fi
+NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v//;s/\..*//')
+if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
+  echo "ERROR: Node.js >= 18 requerido (actual: $(node -v 2>/dev/null || echo 'none'))."
+  exit 1
+fi
+if ! command -v claude >/dev/null 2>&1; then
+  echo "AVISO: Claude Code CLI no encontrado en el PATH."
+  echo "  Instalalo primero: https://docs.anthropic.com/en/docs/claude-code/overview"
+fi
+
 # ── dirs ─────────────────────────────────────────────
 mkdir -p ~/.claude-code-router ~/.claude/hooks
 
