@@ -14,7 +14,7 @@ Flags de configuracion (opcional):
   --default-model <m>      modelo para requests normales (default: deepseek-v4-flash)
   --think-model <m>        modelo para thinking (default: deepseek-v4-pro)
   --longcontext-model <m>  modelo para contexto largo (default: deepseek-v4-pro)
-  --background-model <m>   modelo para tareas en background (default: deepseek-v4-flash)
+  --background-model <m>   modelo para tareas en background (default: deepseek-v4-pro)
   --provider-url <url>     API base URL del provider
   --provider-models <list> modelos del provider separados por coma
 
@@ -41,7 +41,7 @@ NO_HOOKS=false
 DEFAULT_MODEL="deepseek-v4-flash"
 THINK_MODEL="deepseek-v4-pro"
 LONGCONTEXT_MODEL="deepseek-v4-pro"
-BACKGROUND_MODEL="deepseek-v4-flash"
+BACKGROUND_MODEL="deepseek-v4-pro"
 PROVIDER_URL="https://api.deepseek.com/anthropic/v1/messages"
 PROVIDER_MODELS="deepseek-v4-flash,deepseek-v4-pro"
 FLAGS_SET=false
@@ -268,7 +268,7 @@ cat > ~/.claude-code-router/config.json <<CONFIG
     "background": "deepseek,$BACKGROUND_MODEL",
     "think": "deepseek,$THINK_MODEL",
     "longContext": "deepseek,$LONGCONTEXT_MODEL",
-    "longContextThreshold": 60000
+    "longContextThreshold": 30000
   }
 }
 CONFIG

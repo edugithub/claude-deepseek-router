@@ -12,8 +12,11 @@ Proxy de enrutamiento inteligente para Claude Code CLI con modelos DeepSeek (v4-
 
 | Condición | Modelo |
 |---|---|
-| Sin thinking, contexto < 60K tokens | `deepseek-v4-flash` |
-| Thinking activado (high+), o > 60K tokens | `deepseek-v4-pro` |
+| Condición | Modelo |
+|---|---|
+| Sin thinking, contexto < 30K tokens, foreground | `deepseek-v4-flash` |
+| Thinking activado o contexto > 30K tokens | `deepseek-v4-pro` |
+| Background | `deepseek-v4-pro` |
 
 ## Convenciones
 
