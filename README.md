@@ -45,7 +45,10 @@ Te pedirá la API key de DeepSeek y configura todo automáticamente.
 | `~/.claude/hooks/on-session-start.sh` | Hook SessionStart: avisa cambios + sesiones para retomar |
 | `~/.claude/settings.json` | Config de Claude Code + 3 hooks |
 | `$PROJECT/.claude/sessions.json` | Metadata de sesiones (id, fecha, rama, titulo) |
-| Variables en `.zshrc`/`.bashrc` | `ANTHROPIC_BASE_URL`, auto-arranque del proxy |
+| `~/.claude-code-router/logs.sh` | Visor de logs del proxy (alias de `logs.sh` en el repo) |
+| `~/.claude-code-router/config.json` | Configuración de providers y routing |
+| `~/.claude-code-router/router-config` | CLI para consultar/modificar config.json |
+| Variables en `.zshrc`/`.bashrc` | `ANTHROPIC_BASE_URL`, auto-arranque del proxy, `PATH` |
 
 ## Uso diario
 
@@ -58,9 +61,10 @@ claude
 Para ver el routing en vivo:
 
 ```bash
-bash logs.sh      # últimas 20 líneas
-bash logs.sh -f   # seguir en vivo (tail -f)
-bash logs.sh -n 5 # solo 5 líneas
+bash logs.sh                      # últimas 20 líneas (desde el repo)
+bash ~/.claude-code-router/logs.sh  # o desde donde estés
+bash logs.sh -f                   # seguir en vivo (tail -f)
+bash logs.sh -n 5                 # solo 5 líneas
 ```
 
 Salida típica:
@@ -71,6 +75,35 @@ Salida típica:
 ```
 
 Columnas: `modelo | in:tokens_entrada out:tokens_salida cache:tokens_cache_hit`
+
+## router-config CLI
+
+`router-config` permite consultar y modificar la configuración del proxy en vivo.
+
+```bash
+router-config                              # Mostrar config actual
+router-config get Router.think             # Ver modelo para thinking
+router-config set Router.think "deepseek,deepseek-v4-pro"  # Cambiarlo
+router-config set Router.longContextThreshold 80000         # Umbral de contexto
+router-config provider deepseek            # Ver proveedor
+router-config provider deepseek --api-base-url https://... --models "flash,pro"
+```
+
+### Configuración inicial con flags
+
+`setup.sh` acepta flags para personalizar el routing sin intervención interactiva:
+
+```bash
+bash setup.sh \
+  --default-model deepseek-v4-flash \
+  --think-model deepseek-v4-pro \
+  --longcontext-model deepseek-v4-pro \
+  --background-model deepseek-v4-flash \
+  --provider-url https://api.deepseek.com/anthropic/v1/messages \
+  --provider-models "deepseek-v4-flash,deepseek-v4-pro"
+```
+
+Sin flags, el instalador pregunta interactivamente los valores (pulsar Enter usa el default).
 
 ## Sesiones
 
@@ -98,7 +131,7 @@ Usa `/resume <id>` para retomar una sesion anterior.
 
 ## Credenciales
 
-Solo necesitas la **API key de DeepSeek**. Se pide durante la instalación y se guarda como variable de entorno en tu shell. Nunca se escribe en archivos del proyecto.
+Solo necesitas la **API key de DeepSeek**. Se pide durante la instalación y se guarda como variable de entorno en `~/.zshrc`/`~/.bashrc`. Nunca se guarda en `config.json` ni en archivos del proyecto.
 
 ## Portar a otra máquina
 

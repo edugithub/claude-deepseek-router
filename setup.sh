@@ -5,16 +5,28 @@ usage() {
   cat <<'EOF'
 Claude Code + DeepSeek Router — instalador
 
-  bash setup.sh              instalación interactiva (pide API key)
-  bash setup.sh --help       esta ayuda
-  bash setup.sh --no-hooks   instalar sin hook Stop ni change-log
-  bash setup.sh --dry-run    mostrar qué se instalaría, sin tocar nada
+  bash setup.sh                            instalacion interactiva
+  bash setup.sh --help                     esta ayuda
+  bash setup.sh --no-hooks                 instalar sin hooks
+  bash setup.sh --dry-run                  mostrar que se instalaria
 
-Qué hace:
+Flags de configuracion (opcional):
+  --default-model <m>      modelo para requests normales (default: deepseek-v4-flash)
+  --think-model <m>        modelo para thinking (default: deepseek-v4-pro)
+  --longcontext-model <m>  modelo para contexto largo (default: deepseek-v4-pro)
+  --background-model <m>   modelo para tareas en background (default: deepseek-v4-flash)
+  --provider-url <url>     API base URL del provider
+  --provider-models <list> modelos del provider separados por coma
+
+Ejemplo:
+  bash setup.sh --think-model deepseek-v4-pro --default-model deepseek-v4-flash
+
+Que hace:
   1. Crea el proxy de enrutamiento (~/.claude-code-router/proxy.mjs)
   2. Configura variables en .zshrc/.bashrc (ANTHROPIC_BASE_URL, etc.)
-  3. Añade auto-arranque del proxy al abrir terminal
-  4. (Opcional) Instala 3 hooks:
+  3. Anade auto-arranque del proxy al abrir terminal
+  4. Instala router-config CLI para gestionar la configuracion
+  5. (Opcional) Instala 3 hooks:
      - Stop: registra cambios al salir (por rama)
      - SessionStart: avisa si hay cambios sin procesar para CLAUDE.md
      - PreToolUse: registra cambios antes de git checkout
@@ -26,14 +38,31 @@ EOF
 
 DRY_RUN=false
 NO_HOOKS=false
-case "${1:-}" in
-  --help|-h) usage ;;
-  --dry-run) DRY_RUN=true ;;
-  --no-hooks) NO_HOOKS=true ;;
-esac
+DEFAULT_MODEL="deepseek-v4-flash"
+THINK_MODEL="deepseek-v4-pro"
+LONGCONTEXT_MODEL="deepseek-v4-pro"
+BACKGROUND_MODEL="deepseek-v4-flash"
+PROVIDER_URL="https://api.deepseek.com/anthropic/v1/messages"
+PROVIDER_MODELS="deepseek-v4-flash,deepseek-v4-pro"
+FLAGS_SET=false
+
+while [ $# -gt 0 ]; do
+  case "${1:-}" in
+    --help|-h) usage ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    --no-hooks) NO_HOOKS=true; shift ;;
+    --default-model) DEFAULT_MODEL="$2"; FLAGS_SET=true; shift 2 ;;
+    --think-model) THINK_MODEL="$2"; FLAGS_SET=true; shift 2 ;;
+    --longcontext-model) LONGCONTEXT_MODEL="$2"; FLAGS_SET=true; shift 2 ;;
+    --background-model) BACKGROUND_MODEL="$2"; FLAGS_SET=true; shift 2 ;;
+    --provider-url) PROVIDER_URL="$2"; FLAGS_SET=true; shift 2 ;;
+    --provider-models) PROVIDER_MODELS="$2"; FLAGS_SET=true; shift 2 ;;
+    *) echo "Opcion desconocida: $1"; usage ;;
+  esac
+done
 
 echo "=== Claude Code + DeepSeek Router Setup ==="
-$DRY_RUN && echo "[DRY RUN — no se modificará nada]" && set +e
+$DRY_RUN && echo "[DRY RUN — no se modificara nada]" && set +e
 
 # ── API key ──────────────────────────────────────────
 if $DRY_RUN; then
@@ -43,37 +72,103 @@ else
 fi
 export DEEPSEEK_API_KEY="$DS_KEY"
 
+# ── routing config (interactivo si no se usaron flags) ─
+if ! $FLAGS_SET && ! $DRY_RUN; then
+  echo ""
+  echo "--- Routing configuration (Enter = defaults) ---"
+  read -p "  Modelo por defecto [$DEFAULT_MODEL]: " INPUT
+  [ -n "$INPUT" ] && DEFAULT_MODEL="$INPUT"
+  read -p "  Modelo para thinking [$THINK_MODEL]: " INPUT
+  [ -n "$INPUT" ] && THINK_MODEL="$INPUT"
+  read -p "  Modelo para contexto largo [$LONGCONTEXT_MODEL]: " INPUT
+  [ -n "$INPUT" ] && LONGCONTEXT_MODEL="$INPUT"
+  read -p "  Provider API base URL [$PROVIDER_URL]: " INPUT
+  [ -n "$INPUT" ] && PROVIDER_URL="$INPUT"
+  echo ""
+fi
+
 # ── dirs ─────────────────────────────────────────────
 mkdir -p ~/.claude-code-router ~/.claude/hooks
 
 # ── proxy ────────────────────────────────────────────
 cat > ~/.claude-code-router/proxy.mjs <<'PROXY'
 import http from "node:http";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-const UPSTREAM = "https://api.deepseek.com/anthropic/v1/messages";
+const CONFIG_PATH = path.join(os.homedir(), ".claude-code-router", "config.json");
+let config;
+try {
+  config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+} catch {
+  config = {};
+}
+
+const PORT = config.PORT || 3456;
 const API_KEY = process.env.DEEPSEEK_API_KEY;
-const FLASH = "deepseek-v4-flash";
-const PRO = "deepseek-v4-pro";
+const LOG_PATH = process.env.PROXY_LOG_PATH || path.join(os.homedir(), ".claude-code-router", "proxy.log");
+const TIMEOUT_MS = config.API_TIMEOUT_MS || 600_000;
+
+function defaultProvider() {
+  return config.Providers?.[0] || { api_base_url: "https://api.deepseek.com/anthropic/v1/messages", models: [] };
+}
+
+function parseRouter(str) {
+  const parts = (str || "").split(",");
+  return { providerName: parts[0] || "deepseek", model: parts[1] || "deepseek-v4-flash" };
+}
+
+function providerForModel(model) {
+  for (const p of config.Providers || []) {
+    if (p.models?.includes(model)) return p;
+  }
+  return defaultProvider();
+}
 
 function pickModel(body) {
-  if (body?.thinking?.type === "enabled") return PRO;
+  if (body?.thinking?.type === "enabled") {
+    return parseRouter(config.Router?.think).model;
+  }
   const json = JSON.stringify(body?.messages ?? "");
-  if (json.length / 4 > 60_000) return PRO;
-  return FLASH;
+  const threshold = config.Router?.longContextThreshold ?? 60_000;
+  if (json.length / 4 > threshold) {
+    return parseRouter(config.Router?.longContext).model;
+  }
+  return parseRouter(config.Router?.default).model;
 }
+
+let logFd = fs.openSync(LOG_PATH, "a");
+
+function log(msg) {
+  fs.writeSync(logFd, msg + "\n");
+}
+
+process.on("SIGUSR1", () => {
+  fs.closeSync(logFd);
+  logFd = fs.openSync(LOG_PATH, "a");
+  log("[proxy] log reopened (SIGUSR1)");
+});
 
 const server = http.createServer(async (req, res) => {
   if (req.method !== "POST" || !req.url.startsWith("/v1/messages")) {
     res.writeHead(404).end();
     return;
   }
+
   let raw = "";
   req.on("data", (c) => (raw += c));
   req.on("end", async () => {
     try {
       const body = JSON.parse(raw);
       body.model = pickModel(body);
-      const upstream = await fetch(UPSTREAM, {
+      const provider = providerForModel(body.model);
+      const upstreamUrl = provider.api_base_url;
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const upstream = await fetch(upstreamUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -81,29 +176,248 @@ const server = http.createServer(async (req, res) => {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
-      res.writeHead(upstream.status, {
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01",
-      });
-      const text = await upstream.text();
-      try {
-        const u = JSON.parse(text).usage;
-        if (u) {
-          process.stderr.write(
-            `[proxy] → ${body.model} | in:${u.input_tokens} out:${u.output_tokens} cache:${u.cache_read_input_tokens || 0}\n`
-          );
+      clearTimeout(timer);
+
+      const contentType = upstream.headers.get("content-type") || "";
+      const resHeaders = { "anthropic-version": "2023-06-01" };
+      if (contentType) resHeaders["Content-Type"] = contentType;
+      res.writeHead(upstream.status, resHeaders);
+
+      if (contentType.includes("text/event-stream")) {
+        let inputTokens = 0, outputTokens = 0, cacheTokens = 0;
+        const reader = upstream.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          for (const line of chunk.split("\n")) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === "message_start" && data.message?.usage) {
+                  inputTokens = data.message.usage.input_tokens || 0;
+                  cacheTokens = data.message.usage.cache_read_input_tokens || 0;
+                }
+                if (data.type === "message_delta" && data.usage) {
+                  outputTokens = data.usage.output_tokens || 0;
+                }
+              } catch (_) {}
+            }
+          }
+          res.write(chunk);
         }
-      } catch (_) {}
-      res.end(text);
+        log(`[proxy] >> ${body.model} | in:${inputTokens} out:${outputTokens} cache:${cacheTokens}`);
+        res.end();
+      } else {
+        const text = await upstream.text();
+        try {
+          const u = JSON.parse(text).usage;
+          if (u) {
+            log(`[proxy] >> ${body.model} | in:${u.input_tokens} out:${u.output_tokens} cache:${u.cache_read_input_tokens || 0}`);
+          }
+        } catch (_) {}
+        res.end(text);
+      }
     } catch (e) {
+      log(`[proxy] ERROR: ${e.message}`);
       res.writeHead(502).end(JSON.stringify({ error: e.message }));
     }
   });
 });
 
-server.listen(3456, () => process.stderr.write("proxy → http://127.0.0.1:3456\n"));
+server.listen(PORT, () => log(`proxy >> http://127.0.0.1:${PORT}`));
 PROXY
+
+# ── config.json ───────────────────────────────────────
+cat > ~/.claude-code-router/config.json <<CONFIG
+{
+  "PORT": 3456,
+  "API_TIMEOUT_MS": 600000,
+  "Providers": [
+    {
+      "name": "deepseek",
+      "api_base_url": "$PROVIDER_URL",
+      "models": [$(echo "$PROVIDER_MODELS" | sed 's/,/","/g; s/^/"/; s/$/"/')]
+    }
+  ],
+  "Router": {
+    "default": "deepseek,$DEFAULT_MODEL",
+    "background": "deepseek,$BACKGROUND_MODEL",
+    "think": "deepseek,$THINK_MODEL",
+    "longContext": "deepseek,$LONGCONTEXT_MODEL",
+    "longContextThreshold": 60000
+  }
+}
+CONFIG
+
+# ── rotate-logs.sh ────────────────────────────────────
+cat > ~/.claude-code-router/rotate-logs.sh <<'ROTATE'
+#!/bin/bash
+PID=$(pgrep -f "proxy.mjs" | head -1)
+if [ -z "$PID" ]; then
+  echo "proxy no corriendo"
+  exit 1
+fi
+TS=$(date '+%Y%m%d-%H%M%S')
+mv ~/.claude-code-router/proxy.log ~/.claude-code-router/proxy.log."$TS"
+kill -USR1 "$PID"
+echo "log rotado: proxy.log -> proxy.log.$TS"
+ROTATE
+chmod +x ~/.claude-code-router/rotate-logs.sh
+
+# ── logs.sh ────────────────────────────────────────────
+install -m 755 "$(dirname "$0")/logs.sh" ~/.claude-code-router/logs.sh 2>/dev/null || true
+
+# ── router-config CLI ──────────────────────────────────
+cat > ~/.claude-code-router/router-config <<'RCCLI'
+#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { execSync } from "node:child_process";
+
+const CONFIG_PATH = path.join(os.homedir(), ".claude-code-router", "config.json");
+
+function readConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+  } catch { return {}; }
+}
+
+function writeConfig(cfg) {
+  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n");
+}
+
+function getByPath(obj, kp) {
+  let cur = obj;
+  for (const p of kp.split(".")) {
+    if (cur == null || typeof cur !== "object") return undefined;
+    cur = cur[p];
+  }
+  return cur;
+}
+
+function setByPath(obj, kp, val) {
+  const parts = kp.split(".");
+  let cur = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (!(parts[i] in cur) || typeof cur[parts[i]] !== "object") cur[parts[i]] = {};
+    cur = cur[parts[i]];
+  }
+  cur[parts[parts.length - 1]] = val;
+}
+
+function findProvider(cfg, name) {
+  const ps = cfg.Providers || [];
+  return { providers: ps, idx: ps.findIndex((p) => p.name === name) };
+}
+
+function parseValue(raw) {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  if (raw === "null") return null;
+  if (/^-?\d+$/.test(raw)) return parseInt(raw, 10);
+  if (/^-?\d+\.\d+$/.test(raw)) return parseFloat(raw);
+  return raw;
+}
+
+function help() {
+  console.log([
+    "Uso: router-config <comando> [args]",
+    "",
+    "Comandos:",
+    "  (sin comando)                    Mostrar config actual",
+    "  get <key.dotted.path>            Obtener un valor (ej: Router.default)",
+    "  set <key.dotted.path> <valor>    Establecer un valor",
+    "  help                             Mostrar esta ayuda",
+    "  restart                          Reiniciar el proxy (aplica cambios de config)",
+    "",
+    "  provider <nombre>                Mostrar proveedor",
+    "  provider <nombre> --api-base-url <url> [--models \"m1,m2\"]",
+    "                                   Actualizar o crear proveedor",
+    "",
+    "Ejemplos:",
+    "  router-config",
+    '  router-config get Router.think',
+    '  router-config set Router.think "deepseek,deepseek-v4-pro"',
+    "  router-config set Router.longContextThreshold 80000",
+    "  router-config provider deepseek --api-base-url https://...",
+  ].join("\n"));
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  const cmd = args[0] || "show";
+  if (cmd === "help" || cmd === "--help" || cmd === "-h") { help(); return; }
+
+  const config = readConfig();
+
+  if (cmd === "show") { console.log(JSON.stringify(config, null, 2)); return; }
+
+  if (cmd === "get") {
+    const key = args[1];
+    if (!key) { console.error("Uso: router-config get <key>"); process.exit(1); }
+    const val = getByPath(config, key);
+    if (val === undefined) { console.error("Key not found: " + key); process.exit(1); }
+    console.log(typeof val === "object" ? JSON.stringify(val, null, 2) : val);
+    return;
+  }
+
+  if (cmd === "set") {
+    const key = args[1];
+    const raw = args.slice(2).join(" ");
+    if (!key || !raw) { console.error("Uso: router-config set <key> <valor>"); process.exit(1); }
+    setByPath(config, key, parseValue(raw));
+    writeConfig(config);
+    console.log("[ok] " + key + " = " + JSON.stringify(getByPath(config, key)));
+    return;
+  }
+
+  if (cmd === "provider") {
+    const name = args[1];
+    if (!name) { console.error("Uso: router-config provider <nombre> [--api-base-url ...] [--models ...]"); process.exit(1); }
+    const { providers, idx } = findProvider(config, name);
+    const apiIdx = args.indexOf("--api-base-url");
+    const modIdx = args.indexOf("--models");
+    if (apiIdx === -1 && modIdx === -1) {
+      if (idx === -1) { console.error("Provider not found: " + name); process.exit(1); }
+      console.log(JSON.stringify(providers[idx], null, 2));
+      return;
+    }
+    if (idx === -1) {
+      config.Providers = config.Providers || [];
+      config.Providers.push({ name, api_base_url: "", models: [] });
+    }
+    const p = config.Providers[idx === -1 ? config.Providers.length - 1 : idx];
+    if (apiIdx !== -1) p.api_base_url = args[apiIdx + 1];
+    if (modIdx !== -1) p.models = args[modIdx + 1].split(",").map((s) => s.trim());
+    writeConfig(config);
+    console.log("[ok] provider " + name + " actualizado:\n" + JSON.stringify(p, null, 2));
+    return;
+  }
+
+  if (cmd === "restart") {
+    try {
+      const pid = execSync("pgrep -f 'proxy\\.mjs' | head -1", { encoding: "utf-8" }).trim();
+      if (pid) execSync("kill " + pid);
+    } catch (_) { /* proxy not running */ }
+    const proxyPath = path.join(os.homedir(), ".claude-code-router", "proxy.mjs");
+    execSync("node " + proxyPath + " &", { stdio: "ignore" });
+    console.log("[ok] proxy reiniciado");
+    return;
+  }
+
+  console.error("Comando desconocido: " + cmd + " — usa: router-config help");
+  process.exit(1);
+}
+main();
+RCCLI
+chmod +x ~/.claude-code-router/router-config
 
 # ── Hooks ────────────────────────────────────────────
 if $NO_HOOKS; then
@@ -121,7 +435,6 @@ DATE=$(date '+%Y-%m-%d %H:%M')
 SESSIONS_FILE="$ROOT/.claude/sessions.json"
 CHANGELOG="$ROOT/.claude-change-log.md"
 
-# Parte 1: change log
 if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
   echo "## $DATE — $BRANCH" >> "$CHANGELOG"
   echo '```' >> "$CHANGELOG"
@@ -130,7 +443,6 @@ if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; th
   echo "" >> "$CHANGELOG"
 fi
 
-# Parte 2: guardar sesion
 SID=$(echo "$STDIN" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
@@ -181,8 +493,6 @@ fi
 
 python3 -c "
 import json, os
-from datetime import datetime
-
 f = '$SESSIONS_FILE'
 sessions = []
 if os.path.exists(f):
@@ -196,7 +506,7 @@ entry = {
     'id': '$SID',
     'date': '$DATE',
     'branch': '$BRANCH',
-    'title': '''$(echo "$TITLE" | sed "s/'/\\\'/g")'''
+    'title': '''$(echo "$TITLE" | sed \"s/'/\\\\'/g\")'''
 }
 
 found = False
@@ -235,7 +545,7 @@ fi
 HOOK
   chmod +x ~/.claude/hooks/on-checkout.sh
 
-# on-session-start: avisa cambios + sesiones recientes
+  # on-session-start: avisa cambios + sesiones recientes
   cat > ~/.claude/hooks/on-session-start.sh <<'HOOK'
 #!/bin/bash
 STDIN=$(cat)
@@ -307,7 +617,7 @@ if valid:
         sid = s['id']
         opts.append({
             'label': label,
-            'description': f\"{s['date']} — {s.get('branch', '?')}\",
+            'description': f\"{s['date']} - {s.get('branch', '?')}\",
             'resume_id': sid
         })
     print('PREGUNTA: \"Quieres retomar alguna sesion anterior?\"')
@@ -330,35 +640,20 @@ HOOK
     "Stop": [
       {
         "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/on-stop.sh"
-          }
-        ]
+        "hooks": [ { "type": "command", "command": "~/.claude/hooks/on-stop.sh" } ]
       }
     ],
     "SessionStart": [
       {
         "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/on-session-start.sh"
-          }
-        ]
+        "hooks": [ { "type": "command", "command": "~/.claude/hooks/on-session-start.sh" } ]
       }
     ],
     "PreToolUse": [
       {
         "matcher": "Bash",
         "if": "Bash(git checkout *)",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/on-checkout.sh"
-          }
-        ]
+        "hooks": [ { "type": "command", "command": "~/.claude/hooks/on-checkout.sh" } ]
       }
     ]
   }
@@ -373,11 +668,11 @@ elif [ -f ~/.bashrc ]; then RC=~/.bashrc
 fi
 
 if [ -n "$RC" ]; then
-  # remove old lines if re-running
   sed -i '/ANTHROPIC_BASE_URL=http:\/\/127.0.0.1:3456/d' "$RC"
   sed -i '/ANTHROPIC_MODEL=deepseek-v4-pro/d' "$RC"
   sed -i '/DEEPSEEK_API_KEY/d' "$RC"
   sed -i '/proxy.mjs/d' "$RC"
+  sed -i '/router-config/d' "$RC"
   sed -i '/# Claude Code + DeepSeek Router/d' "$RC"
 
   cat >> "$RC" <<SHELL
@@ -387,12 +682,13 @@ export DEEPSEEK_API_KEY='$DS_KEY'
 export ANTHROPIC_BASE_URL=http://127.0.0.1:3456
 export ANTHROPIC_AUTH_TOKEN='$DS_KEY'
 export ANTHROPIC_MODEL=deepseek-v4-pro
-ss -tln | grep -q 3456 || node ~/.claude-code-router/proxy.mjs 2>>~/.claude-code-router/proxy.log &
+export PATH="\$HOME/.claude-code-router:\$PATH"
+ss -tln | grep -q 3456 || node ~/.claude-code-router/proxy.mjs &
 SHELL
 fi
 
 # ── start proxy now ──────────────────────────────────
-ss -tln | grep -q 3456 || node ~/.claude-code-router/proxy.mjs 2>>~/.claude-code-router/proxy.log &
+ss -tln | grep -q 3456 || node ~/.claude-code-router/proxy.mjs &
 
 echo ""
 echo "Listo. Abre una terminal nueva o ejecuta: source $RC"
