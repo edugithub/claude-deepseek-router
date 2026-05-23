@@ -277,7 +277,7 @@ transcripts_dir = os.path.join(home, '.claude', 'projects', sanitized)
 with open(sessions_file) as f:
     sessions = json.load(f)
 
-recent = []
+valid = []
 for s in sessions:
     sid = s.get('id', '')
     if sid == current_sid:
@@ -294,16 +294,29 @@ for s in sessions:
     if not os.path.exists(transcript):
         continue
 
-    recent.append(s)
+    valid.append(s)
 
-if recent:
+if valid:
     print()
-    print('*** SESIONES ANTERIORES ENCONTRADAS ***')
-    print('Como primer mensaje en esta conversacion, DEBES preguntar al usuario si quiere retomar alguna:')
-    for s in recent[:5]:
-        print(f\"  [{s['date']}] {s['title']} ({s.get('branch', '?')})  /resume {s['id']}\")
+    print('*** SESIONES ANTERIORES ***')
+    print('Como PRIMER mensaje, usa la herramienta AskUserQuestion con estas opciones:')
     print()
-    print('Indica al usuario que puede usar /resume <id> para retomar cualquiera de ellas.')
+    opts = []
+    for s in valid[:4]:
+        label = s['title'][:60]
+        sid = s['id']
+        opts.append({
+            'label': label,
+            'description': f\"{s['date']} — {s.get('branch', '?')}\",
+            'resume_id': sid
+        })
+    print('PREGUNTA: \"Quieres retomar alguna sesion anterior?\"')
+    print('OPCIONES:')
+    for i, o in enumerate(opts):
+        print(f\"  {i+1}. {o['label']} ({o['description']}) -> /resume {o['resume_id']}\")
+    print('OPCION_EXTRA: \"No, empezar nueva sesion\"')
+    print()
+    print('IMPORTANTE: Usa AskUserQuestion YA MISMO, no esperes a que el usuario escriba.')
 " 2>/dev/null
 HOOK
   chmod +x ~/.claude/hooks/on-session-start.sh
