@@ -27,7 +27,7 @@ El proxy inspecciona cada request y decide:
 ## Instalación
 
 ```bash
-git clone https://github.com/TU-USUARIO/claude-deepseek-router.git
+git clone https://github.com/edugithub/claude-deepseek-router.git
 cd claude-deepseek-router
 bash setup.sh
 ```
@@ -76,7 +76,7 @@ Solo necesitas la **API key de DeepSeek**. Se pide durante la instalación y se 
 ## Portar a otra máquina
 
 ```bash
-git clone https://github.com/TU-USUARIO/claude-deepseek-router.git
+git clone https://github.com/edugithub/claude-deepseek-router.git
 cd claude-deepseek-router && bash setup.sh
 ```
 
