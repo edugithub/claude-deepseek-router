@@ -126,6 +126,9 @@ const API_KEY = process.env.DEEPSEEK_API_KEY;
 const LOG_PATH = process.env.PROXY_LOG_PATH || path.join(os.homedir(), ".claude-code-router", "proxy.log");
 const TIMEOUT_MS = config.API_TIMEOUT_MS || 600_000;
 
+fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
+fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
+
 function defaultProvider() {
   return config.Providers?.[0] || { api_base_url: "https://api.deepseek.com/anthropic/v1/messages", models: [] };
 }
@@ -246,8 +249,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => log(`proxy >> http://127.0.0.1:${PORT}`));
-PROXY
 
+PROXY
 # ── config.json ───────────────────────────────────────
 cat > ~/.claude-code-router/config.json <<CONFIG
 {
