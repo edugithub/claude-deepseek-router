@@ -1,3 +1,4 @@
 *.log
 *.tar.gz
 .claude-change-log.md
+.claude/sessions.json

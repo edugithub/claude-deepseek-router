@@ -211,6 +211,7 @@ if not found:
 
 sessions = sessions[:20]
 
+os.makedirs(os.path.dirname(f), exist_ok=True)
 with open(f, 'w') as fh:
     json.dump(sessions, fh, ensure_ascii=False, indent=2)
 " 2>/dev/null
