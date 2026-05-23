@@ -650,34 +650,59 @@ if valid:
 HOOK
   chmod +x ~/.claude/hooks/on-session-start.sh
 
-  # settings.json con los 3 hooks
-  [ -f ~/.claude/settings.json ] && cp ~/.claude/settings.json ~/.claude/settings.json.bak
-  cat > ~/.claude/settings.json <<'SETTINGS'
-{
-  "theme": "auto",
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [ { "type": "command", "command": "~/.claude/hooks/on-stop.sh" } ]
-      }
+  # Merge hooks into settings.json (no sobrescribe)
+  python3 -c "
+import json, os
+
+# Hooks que instalamos
+our_hooks = {
+    'Stop': [
+        {'matcher': '', 'hooks': [{'type': 'command', 'command': os.path.expanduser('~/.claude/hooks/on-stop.sh')}]}
     ],
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [ { "type": "command", "command": "~/.claude/hooks/on-session-start.sh" } ]
-      }
+    'SessionStart': [
+        {'matcher': '', 'hooks': [{'type': 'command', 'command': os.path.expanduser('~/.claude/hooks/on-session-start.sh')}]}
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "if": "Bash(git checkout *)",
-        "hooks": [ { "type": "command", "command": "~/.claude/hooks/on-checkout.sh" } ]
-      }
+    'PreToolUse': [
+        {'matcher': 'Bash', 'if': 'Bash(git checkout *)', 'hooks': [{'type': 'command', 'command': os.path.expanduser('~/.claude/hooks/on-checkout.sh')}]}
     ]
-  }
 }
-SETTINGS
+
+cfg = {}
+cfg_path = os.path.expanduser('~/.claude/settings.json')
+if os.path.exists(cfg_path):
+    with open(cfg_path) as f:
+        try:
+            cfg = json.load(f)
+        except:
+            pass
+
+# Backup
+if cfg:
+    with open(cfg_path + '.bak', 'w') as f:
+        json.dump(cfg, f, indent=2)
+
+cfg.setdefault('hooks', {})
+
+for event, our_triggers in our_hooks.items():
+    existing = cfg['hooks'].setdefault(event, [])
+    for ot in our_triggers:
+        # Avoid duplicates
+        already = False
+        for et in existing:
+            if et.get('matcher') == ot.get('matcher') and et.get('if') == ot.get('if'):
+                et_cmds = [h.get('command') for h in et.get('hooks', [])]
+                ot_cmds = [h.get('command') for h in ot.get('hooks', [])]
+                if et_cmds == ot_cmds:
+                    already = True
+                    break
+        if not already:
+            existing.append(ot)
+
+os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+with open(cfg_path, 'w') as f:
+    json.dump(cfg, f, indent=2)
+print('[ok] hooks merged into settings.json')
+"
 fi
 
 # ── .zshrc / .bashrc ─────────────────────────────────
