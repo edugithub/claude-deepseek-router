@@ -235,7 +235,7 @@ fi
 HOOK
   chmod +x ~/.claude/hooks/on-checkout.sh
 
-  # on-session-start: avisa cambios + sesiones recientes
+# on-session-start: avisa cambios + sesiones recientes
   cat > ~/.claude/hooks/on-session-start.sh <<'HOOK'
 #!/bin/bash
 STDIN=$(cat)
@@ -258,6 +258,8 @@ print(d.get('session_id', ''))
 [ ! -f "$SESSIONS_FILE" ] && exit 0
 
 NOW=$(date +%s)
+HOME_DIR="$HOME"
+PROJECT_ROOT="$ROOT"
 
 python3 -c "
 import json, os
@@ -266,28 +268,40 @@ from datetime import datetime
 sessions_file = '$SESSIONS_FILE'
 current_sid = '$CURRENT_SID'
 now_ts = $NOW
+home = '$HOME_DIR'
+root = '$PROJECT_ROOT'
+
+sanitized = '-' + root.lstrip('/').replace('/', '-')
+transcripts_dir = os.path.join(home, '.claude', 'projects', sanitized)
 
 with open(sessions_file) as f:
     sessions = json.load(f)
 
 recent = []
 for s in sessions:
-    if s.get('id') == current_sid:
+    sid = s.get('id', '')
+    if sid == current_sid:
         continue
     try:
         dt = datetime.strptime(s['date'], '%Y-%m-%d %H:%M')
         age = now_ts - dt.timestamp()
-        if age > 60:
-            recent.append(s)
+        if age <= 60:
+            continue
     except:
         continue
+
+    transcript = os.path.join(transcripts_dir, sid + '.jsonl')
+    if not os.path.exists(transcript):
+        continue
+
+    recent.append(s)
 
 if recent:
     print()
     print('*** SESIONES ANTERIORES ENCONTRADAS ***')
     print('Como primer mensaje en esta conversacion, DEBES preguntar al usuario si quiere retomar alguna:')
     for s in recent[:5]:
-        print(f\"  [{s['date']}] {s['title']} ({s.get('branch', '?')})  /resume {s['id'][:8]}\")
+        print(f\"  [{s['date']}] {s['title']} ({s.get('branch', '?')})  /resume {s['id']}\")
     print()
     print('Indica al usuario que puede usar /resume <id> para retomar cualquiera de ellas.')
 " 2>/dev/null
