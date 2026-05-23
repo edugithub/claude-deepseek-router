@@ -42,8 +42,9 @@ Te pedirá la API key de DeepSeek y configura todo automáticamente.
 | `~/.claude-code-router/proxy.log` | Logs: modelo + tokens por request |
 | `~/.claude/hooks/on-stop.sh` | Hook Stop: registra git diff por rama al salir |
 | `~/.claude/hooks/on-checkout.sh` | Hook PreToolUse: registra cambios antes de git checkout |
-| `~/.claude/hooks/on-session-start.sh` | Hook SessionStart: avisa si hay cambios sin procesar |
+| `~/.claude/hooks/on-session-start.sh` | Hook SessionStart: avisa cambios + sesiones para retomar |
 | `~/.claude/settings.json` | Config de Claude Code + 3 hooks |
+| `$PROJECT/.claude/sessions.json` | Metadata de sesiones (id, fecha, rama, titulo) |
 | Variables en `.zshrc`/`.bashrc` | `ANTHROPIC_BASE_URL`, auto-arranque del proxy |
 
 ## Uso diario
@@ -70,6 +71,30 @@ Salida típica:
 ```
 
 Columnas: `modelo | in:tokens_entrada out:tokens_salida cache:tokens_cache_hit`
+
+## Sesiones
+
+Al cerrar Claude Code, el hook Stop guarda metadata de la sesion en `.claude/sessions.json`:
+
+```json
+[
+  {
+    "id": "abc12345",
+    "date": "2026-05-23 16:30",
+    "branch": "main",
+    "title": "Fix login button"
+  }
+]
+```
+
+Al abrir una nueva sesion en el mismo proyecto, el hook SessionStart muestra las sesiones recientes y Claude Code pregunta si quieres retomar alguna.
+
+```
+Sesiones recientes en este proyecto:
+  - [2026-05-23 16:30] Fix login button (main)  /resume abc12345
+```
+
+Usa `/resume <id>` para retomar una sesion anterior.
 
 ## Credenciales
 

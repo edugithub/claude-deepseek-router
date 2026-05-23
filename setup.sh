@@ -111,20 +111,109 @@ if $NO_HOOKS; then
 else
   mkdir -p ~/.claude/hooks
 
-  # on-stop: registra cambios al salir (por rama)
+  # on-stop: registra cambios + guarda metadata de sesion
   cat > ~/.claude/hooks/on-stop.sh <<'HOOK'
 #!/bin/bash
+STDIN=$(cat)
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
-LOG="$ROOT/.claude-change-log.md"
 BRANCH=$(git branch --show-current 2>/dev/null)
 DATE=$(date '+%Y-%m-%d %H:%M')
+SESSIONS_FILE="$ROOT/.claude/sessions.json"
+CHANGELOG="$ROOT/.claude-change-log.md"
+
+# Parte 1: change log
 if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-  echo "## $DATE — $BRANCH" >> "$LOG"
-  echo '```' >> "$LOG"
-  git diff --stat HEAD 2>/dev/null >> "$LOG"
-  echo '```' >> "$LOG"
-  echo "" >> "$LOG"
+  echo "## $DATE — $BRANCH" >> "$CHANGELOG"
+  echo '```' >> "$CHANGELOG"
+  git diff --stat HEAD 2>/dev/null >> "$CHANGELOG"
+  echo '```' >> "$CHANGELOG"
+  echo "" >> "$CHANGELOG"
 fi
+
+# Parte 2: guardar sesion
+SID=$(echo "$STDIN" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(d.get('session_id', ''))
+" 2>/dev/null)
+
+TRANSCRIPT=$(echo "$STDIN" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(d.get('transcript_path', ''))
+" 2>/dev/null)
+
+[ -z "$SID" ] && exit 0
+
+TITLE=""
+if [ -f "$TRANSCRIPT" ]; then
+  TITLE=$(python3 -c "
+import sys, json
+title = ''
+first_prompt = ''
+with open('$TRANSCRIPT') as f:
+    for line in f:
+        try:
+            d = json.loads(line.strip())
+        except:
+            continue
+        t = d.get('type', '')
+        if t == 'custom-title':
+            title = d.get('customTitle', '')
+            break
+        if t == 'ai-title' and not title:
+            title = d.get('aiTitle', '')
+        if t == 'user' and not first_prompt:
+            msg = d.get('message', '')
+            if isinstance(msg, str):
+                first_prompt = msg.strip()[:80]
+            elif isinstance(msg, list):
+                for m in msg:
+                    if isinstance(m, dict) and 'text' in m:
+                        first_prompt = m['text'].strip()[:80]
+                        break
+if not title:
+    title = first_prompt or 'Sin titulo'
+print(title)
+" 2>/dev/null)
+fi
+[ -z "$TITLE" ] && TITLE="Sin titulo"
+
+python3 -c "
+import json, os
+from datetime import datetime
+
+f = '$SESSIONS_FILE'
+sessions = []
+if os.path.exists(f):
+    try:
+        with open(f) as fh:
+            sessions = json.load(fh)
+    except:
+        sessions = []
+
+entry = {
+    'id': '$SID',
+    'date': '$DATE',
+    'branch': '$BRANCH',
+    'title': '''$(echo "$TITLE" | sed "s/'/\\\'/g")'''
+}
+
+found = False
+for i, s in enumerate(sessions):
+    if s.get('id') == '$SID':
+        sessions[i] = entry
+        found = True
+        break
+
+if not found:
+    sessions.insert(0, entry)
+
+sessions = sessions[:20]
+
+with open(f, 'w') as fh:
+    json.dump(sessions, fh, ensure_ascii=False, indent=2)
+" 2>/dev/null
 HOOK
   chmod +x ~/.claude/hooks/on-stop.sh
 
@@ -145,15 +234,61 @@ fi
 HOOK
   chmod +x ~/.claude/hooks/on-checkout.sh
 
-  # on-session-start: avisa si hay cambios sin procesar
+  # on-session-start: avisa cambios + sesiones recientes
   cat > ~/.claude/hooks/on-session-start.sh <<'HOOK'
 #!/bin/bash
+STDIN=$(cat)
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 CHANGELOG="$ROOT/.claude-change-log.md"
+SESSIONS_FILE="$ROOT/.claude/sessions.json"
+
 if [ -f "$CHANGELOG" ] && [ "$(wc -l < "$CHANGELOG")" -gt 0 ]; then
   echo "AVISO: Hay cambios registrados en .claude-change-log.md."
   echo "Revisa el change log y actualiza CLAUDE.md con lo relevante."
 fi
+
+CURRENT_SID=$(echo "$STDIN" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(d.get('session_id', ''))
+" 2>/dev/null)
+
+[ -z "$CURRENT_SID" ] && exit 0
+[ ! -f "$SESSIONS_FILE" ] && exit 0
+
+NOW=$(date +%s)
+
+python3 -c "
+import json, os
+from datetime import datetime
+
+sessions_file = '$SESSIONS_FILE'
+current_sid = '$CURRENT_SID'
+now_ts = $NOW
+
+with open(sessions_file) as f:
+    sessions = json.load(f)
+
+recent = []
+for s in sessions:
+    if s.get('id') == current_sid:
+        continue
+    try:
+        dt = datetime.strptime(s['date'], '%Y-%m-%d %H:%M')
+        age = now_ts - dt.timestamp()
+        if age > 60:
+            recent.append(s)
+    except:
+        continue
+
+if recent:
+    print()
+    print('Sesiones recientes en este proyecto:')
+    for s in recent[:5]:
+        print(f\"  - [{s['date']}] {s['title']} ({s.get('branch', '?')})  /resume {s['id'][:8]}\")
+    print()
+    print('Para retomar una sesion anterior, indicaselo al usuario.')
+" 2>/dev/null
 HOOK
   chmod +x ~/.claude/hooks/on-session-start.sh
 
