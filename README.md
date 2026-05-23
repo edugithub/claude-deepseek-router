@@ -1,0 +1,85 @@
+# Claude Code + DeepSeek Router
+
+Proxy de enrutamiento inteligente para [Claude Code CLI](https://github.com/anthropics/claude-code) con modelos DeepSeek. Sin dependencias externas, solo Node.js nativo.
+
+## Cómo funciona
+
+```
+claude → proxy (127.0.0.1:3456) → DeepSeek API
+                                   ├─ v4-flash (tareas simples)
+                                   └─ v4-pro  (thinking / contexto largo)
+```
+
+El proxy inspecciona cada request y decide:
+
+| Condición | Modelo |
+|---|---|
+| Sin thinking, contexto < 60K tokens | `deepseek-v4-flash` |
+| Thinking activado (`/effort high`+) | `deepseek-v4-pro` |
+| Conversación > 60K tokens | `deepseek-v4-pro` |
+
+## Requisitos
+
+- **Node.js >= 18**
+- **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/overview)** instalado
+- **DeepSeek API key** — [obtener aquí](https://platform.deepseek.com/api_keys)
+
+## Instalación
+
+```bash
+git clone https://github.com/TU-USUARIO/claude-deepseek-router.git
+cd claude-deepseek-router
+bash setup.sh
+```
+
+Te pedirá la API key de DeepSeek y configura todo automáticamente.
+
+## Qué instala
+
+| Archivo | Propósito |
+|---|---|
+| `~/.claude-code-router/proxy.mjs` | Proxy (~50 líneas, Node nativo) |
+| `~/.claude-code-router/proxy.log` | Logs: modelo + tokens por request |
+| `~/.claude/hooks/on-stop.sh` | Hook: registra git diff al salir de Claude Code |
+| `~/.claude/settings.json` | Config de Claude Code + hook Stop |
+| Variables en `.zshrc`/`.bashrc` | `ANTHROPIC_BASE_URL`, auto-arranque del proxy |
+
+## Uso diario
+
+Abrir terminal y Claude Code normalmente. El proxy arranca solo.
+
+```bash
+claude
+```
+
+Para ver el routing en vivo:
+
+```bash
+bash logs.sh      # últimas 20 líneas
+bash logs.sh -f   # seguir en vivo (tail -f)
+bash logs.sh -n 5 # solo 5 líneas
+```
+
+Salida típica:
+
+```
+[proxy] → deepseek-v4-flash | in:1234 out:567 cache:0
+[proxy] → deepseek-v4-pro  | in:8921 out:2341 cache:123
+```
+
+Columnas: `modelo | in:tokens_entrada out:tokens_salida cache:tokens_cache_hit`
+
+## Credenciales
+
+Solo necesitas la **API key de DeepSeek**. Se pide durante la instalación y se guarda como variable de entorno en tu shell. Nunca se escribe en archivos del proyecto.
+
+## Portar a otra máquina
+
+```bash
+git clone https://github.com/TU-USUARIO/claude-deepseek-router.git
+cd claude-deepseek-router && bash setup.sh
+```
+
+## Licencia
+
+Dominio público. Sin restricciones.
