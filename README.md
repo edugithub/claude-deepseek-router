@@ -40,6 +40,7 @@ Te pedirá la API key de DeepSeek y configura todo automáticamente.
 |---|---|
 | `~/.claude-code-router/proxy.mjs` | Proxy (~140 líneas, Node nativo) |
 | `~/.claude-code-router/proxy.log` | Logs: modelo + tokens por request |
+| `~/.claude-code-router/last-model.txt` | Último modelo enrutado (para status line) |
 | `~/.claude-code-router/logs.sh` | Visor de logs del proxy (alias de `logs.sh` en el repo) |
 | `~/.claude-code-router/config.json` | Configuración de providers y routing |
 | `~/.claude-code-router/router-config` | CLI para consultar/modificar config.json |
@@ -82,16 +83,18 @@ Columnas: `modelo | in:tokens_entrada out:tokens_salida cache:tokens_cache_hit`
 El instalador configura una **status line** en el prompt de Claude Code que muestra información útil de la sesión en tiempo real:
 
 ```
-[deepseek-v4-pro] 📁 claude-deepseek-router | in:43309 out:135 | 22% ████░░░░░░ | ⚡high
+[deepseek-v4-flash] 📁 claude-deepseek-router | in:43309 out:135 | 22% ████░░░░░░ | ⚡high
 ```
 
 | Componente | Descripción |
 |---|---|
-| `deepseek-v4-pro` | Modelo activo en la sesión |
+| `deepseek-v4-flash` | Modelo real enrutado por el proxy (lee de `last-model.txt`) |
 | `📁 claude-deepseek-router` | Directorio del proyecto |
 | `in:43309 out:135` | Tokens totales de entrada/salida en la sesión |
 | `22% ████░░░░░░` | Porcentaje de uso de la ventana de contexto + barra visual |
 | `⚡high` | Nivel de esfuerzo (`/effort`) |
+
+> **Nota:** El modelo en la status line refleja la decisión de routing del proxy en tiempo real (flash para requests simples, pro para thinking/contexto largo), no el modelo configurado en `ANTHROPIC_MODEL`.
 
 ## router-config CLI
 
