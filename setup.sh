@@ -119,6 +119,27 @@ if ! command -v jq >/dev/null 2>&1; then
   fi
 fi
 
+# ── npm ────────────────────────────────────────────
+if ! command -v npm >/dev/null 2>&1; then
+  if $DRY_RUN; then
+    echo "[dry-run] se instalaria npm"
+  else
+    echo "npm no encontrado. Instalando..."
+    if command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get update -qq && sudo apt-get install -y npm
+    elif command -v dnf >/dev/null 2>&1; then
+      sudo dnf install -y npm
+    elif command -v pacman >/dev/null 2>&1; then
+      sudo pacman -S --noconfirm npm
+    elif command -v brew >/dev/null 2>&1; then
+      brew install npm
+    else
+      echo "ERROR: No se pudo instalar npm automaticamente. Instalalo manualmente."
+      exit 1
+    fi
+  fi
+fi
+
 # ── claude ─────────────────────────────────────────
 if ! command -v claude >/dev/null 2>&1; then
   if $DRY_RUN; then
