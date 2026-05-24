@@ -91,6 +91,7 @@ fi
 load_nvm() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" || true
+  command -v nvm >/dev/null 2>&1 && nvm use default 2>/dev/null || true
 }
 NVM_LTS="lts/jod"
 NEED_NODE=false
