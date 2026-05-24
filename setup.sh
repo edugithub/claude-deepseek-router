@@ -655,15 +655,19 @@ HOOK
   cat > ~/.claude/statusline.sh <<'STATUS'
 #!/bin/bash
 input=$(cat)
-MODEL=$(echo "$input" | jq -r '.model.display_name')
-PCT=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
-BAR_WIDTH=10
-FILLED=$((PCT * BAR_WIDTH / 100))
-EMPTY=$((BAR_WIDTH - FILLED))
+MODEL=$(echo "$input" | jq -r '.model.display_name // "?"')
+DIR=$(echo "$input" | jq -r '.workspace.current_dir // "?"')
+PCT=$(echo "$input" | jq -r '.context_window.used_percentage // 0 | floor')
+IN=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
+OUT=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0')
+EFFORT=$(echo "$input" | jq -r '.effort.level // "?"')
+BAR_SIZE=10
+FILL=$((PCT * BAR_SIZE / 100))
 BAR=""
-[ "$FILLED" -gt 0 ] && printf -v FILL "%${FILLED}s" && BAR="${FILL// /▓}"
-[ "$EMPTY" -gt 0 ] && printf -v PAD "%${EMPTY}s" && BAR="${BAR}${PAD// /░}"
-echo "[$MODEL] $BAR $PCT%"
+for ((i=0; i<BAR_SIZE; i++)); do
+  if [ $i -lt $FILL ]; then BAR="${BAR}█"; else BAR="${BAR}░"; fi
+done
+echo "[$MODEL] 📁 ${DIR##*/} | in:${IN} out:${OUT} | ${PCT}% ${BAR} | ⚡${EFFORT}"
 STATUS
   chmod +x ~/.claude/statusline.sh
 

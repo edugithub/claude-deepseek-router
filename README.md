@@ -38,16 +38,17 @@ Te pedirá la API key de DeepSeek y configura todo automáticamente.
 
 | Archivo | Propósito |
 |---|---|
-| `~/.claude-code-router/proxy.mjs` | Proxy (~50 líneas, Node nativo) |
+| `~/.claude-code-router/proxy.mjs` | Proxy (~140 líneas, Node nativo) |
 | `~/.claude-code-router/proxy.log` | Logs: modelo + tokens por request |
-| `~/.claude/hooks/on-stop.sh` | Hook Stop: registra git diff por rama al salir |
-| `~/.claude/hooks/on-checkout.sh` | Hook PreToolUse: registra cambios antes de git checkout |
-| `~/.claude/hooks/on-session-start.sh` | Hook SessionStart: avisa cambios + sesiones para retomar |
-| `~/.claude/settings.json` | Config de Claude Code + 3 hooks |
-| `$PROJECT/.claude/sessions.json` | Metadata de sesiones (id, fecha, rama, titulo) |
 | `~/.claude-code-router/logs.sh` | Visor de logs del proxy (alias de `logs.sh` en el repo) |
 | `~/.claude-code-router/config.json` | Configuración de providers y routing |
 | `~/.claude-code-router/router-config` | CLI para consultar/modificar config.json |
+| `~/.claude/hooks/on-stop.sh` | Hook Stop: registra git diff por rama al salir |
+| `~/.claude/hooks/on-checkout.sh` | Hook PreToolUse: registra cambios antes de git checkout |
+| `~/.claude/hooks/on-session-start.sh` | Hook SessionStart: avisa cambios + sesiones para retomar |
+| `~/.claude/settings.json` | Config de Claude Code + hooks + status line |
+| `~/.claude/statusline.sh` | Status line: modelo, tokens, % contexto, esfuerzo |
+| `$PROJECT/.claude/sessions.json` | Metadata de sesiones (id, fecha, rama, titulo) |
 | Variables en `.zshrc`/`.bashrc` | `ANTHROPIC_BASE_URL`, auto-arranque del proxy, `PATH` |
 
 ## Uso diario
@@ -75,6 +76,22 @@ Salida típica:
 ```
 
 Columnas: `modelo | in:tokens_entrada out:tokens_salida cache:tokens_cache_hit`
+
+## Status line
+
+El instalador configura una **status line** en el prompt de Claude Code que muestra información útil de la sesión en tiempo real:
+
+```
+[deepseek-v4-pro] 📁 claude-deepseek-router | in:43309 out:135 | 22% ████░░░░░░ | ⚡high
+```
+
+| Componente | Descripción |
+|---|---|
+| `deepseek-v4-pro` | Modelo activo en la sesión |
+| `📁 claude-deepseek-router` | Directorio del proyecto |
+| `in:43309 out:135` | Tokens totales de entrada/salida en la sesión |
+| `22% ████░░░░░░` | Porcentaje de uso de la ventana de contexto + barra visual |
+| `⚡high` | Nivel de esfuerzo (`/effort`) |
 
 ## router-config CLI
 
