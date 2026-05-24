@@ -90,7 +90,7 @@ fi
 # ── nvm + node ─────────────────────────────────────
 load_nvm() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" || true
 }
 NVM_LTS="lts/jod"
 NEED_NODE=false
