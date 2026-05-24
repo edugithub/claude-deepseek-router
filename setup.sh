@@ -97,10 +97,49 @@ if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
   echo "ERROR: Node.js >= 18 requerido (actual: $(node -v 2>/dev/null || echo 'none'))."
   exit 1
 fi
+
+# ── jq ─────────────────────────────────────────────
+if ! command -v jq >/dev/null 2>&1; then
+  if $DRY_RUN; then
+    echo "[dry-run] se instalaria jq"
+  else
+    echo "jq no encontrado. Instalando..."
+    if command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get update -qq && sudo apt-get install -y jq
+    elif command -v dnf >/dev/null 2>&1; then
+      sudo dnf install -y jq
+    elif command -v pacman >/dev/null 2>&1; then
+      sudo pacman -S --noconfirm jq
+    elif command -v brew >/dev/null 2>&1; then
+      brew install jq
+    else
+      echo "ERROR: No se pudo instalar jq automaticamente. Instalalo manualmente."
+      exit 1
+    fi
+  fi
+fi
+
+# ── claude ─────────────────────────────────────────
 if ! command -v claude >/dev/null 2>&1; then
-  echo "ERROR: Claude Code CLI no encontrado en el PATH."
-  echo "  Instalalo: https://docs.anthropic.com/en/docs/claude-code/overview"
-  exit 1
+  if $DRY_RUN; then
+    echo "[dry-run] se instalaria Claude Code CLI"
+  else
+    echo ""
+    echo "Claude Code CLI no encontrado."
+    echo "  Instalacion oficial: npm install -g @anthropic-ai/claude-code"
+    read -p "  Instalar ahora con npm? [S/n] " INSTALL_CLAUDE
+    if [ "$INSTALL_CLAUDE" != "n" ] && [ "$INSTALL_CLAUDE" != "N" ]; then
+      npm install -g @anthropic-ai/claude-code || {
+        echo "ERROR: Fallo la instalacion. Instalalo manualmente:"
+        echo "  npm install -g @anthropic-ai/claude-code"
+        exit 1
+      }
+    else
+      echo "Instala Claude Code CLI manualmente y vuelve a ejecutar setup.sh"
+      echo "  npm install -g @anthropic-ai/claude-code"
+      exit 1
+    fi
+  fi
 fi
 
 # ── dirs ─────────────────────────────────────────────
