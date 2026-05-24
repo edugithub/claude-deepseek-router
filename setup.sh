@@ -87,14 +87,48 @@ if ! $FLAGS_SET && ! $DRY_RUN; then
   echo ""
 fi
 
-# ── requisitos ──────────────────────────────────────
+# ── node ───────────────────────────────────────────
+NEED_NODE=false
 if ! command -v node >/dev/null 2>&1; then
-  echo "ERROR: Node.js no encontrado. Instala Node.js >= 18."
-  exit 1
+  NEED_NODE=true
+else
+  NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v//;s/\..*//')
+  if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
+    NEED_NODE=true
+  fi
 fi
+if $NEED_NODE; then
+  if $DRY_RUN; then
+    echo "[dry-run] se instalaria Node.js >= 18"
+  else
+    echo "Node.js >= 18 no encontrado (actual: $(node -v 2>/dev/null || echo 'none'))."
+    echo "  Recomendado: https://nodejs.org/ o nvm (https://github.com/nvm-sh/nvm)"
+    read -p "  Intentar instalar con gestor de paquetes del sistema? [S/n] " INSTALL_NODE
+    if [ "$INSTALL_NODE" != "n" ] && [ "$INSTALL_NODE" != "N" ]; then
+      if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update -qq && sudo apt-get install -y nodejs
+      elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y nodejs
+      elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --noconfirm nodejs
+      elif command -v brew >/dev/null 2>&1; then
+        brew install node
+      else
+        echo "ERROR: No se pudo instalar Node.js. Instalalo manualmente: https://nodejs.org/"
+        exit 1
+      fi
+    else
+      echo "Instala Node.js >= 18 y vuelve a ejecutar setup.sh"
+      echo "  https://nodejs.org/ o nvm install 18"
+      exit 1
+    fi
+  fi
+fi
+# Re-validate after potential install
 NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v//;s/\..*//')
 if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
   echo "ERROR: Node.js >= 18 requerido (actual: $(node -v 2>/dev/null || echo 'none'))."
+  echo "  Instalalo via: https://nodejs.org/ o nvm install 18"
   exit 1
 fi
 
