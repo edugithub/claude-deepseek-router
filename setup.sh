@@ -90,8 +90,13 @@ fi
 # ── nvm + node ─────────────────────────────────────
 load_nvm() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" || true
-  command -v nvm >/dev/null 2>&1 && nvm use default 2>/dev/null || true
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    . "$NVM_DIR/nvm.sh"
+    nvm use default 2>/dev/null || true
+    # nvm a veces no exporta PATH correctamente desde una funcion
+    NODE_BIN=$(nvm which default 2>/dev/null | head -1)
+    [ -n "$NODE_BIN" ] && export PATH="$(dirname "$NODE_BIN"):$PATH"
+  fi
 }
 NVM_LTS="lts/jod"
 NEED_NODE=false
