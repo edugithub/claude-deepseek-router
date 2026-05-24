@@ -87,8 +87,14 @@ if ! $FLAGS_SET && ! $DRY_RUN; then
   echo ""
 fi
 
-# ── node ───────────────────────────────────────────
+# ── nvm + node ─────────────────────────────────────
+load_nvm() {
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+}
+NVM_LTS="lts/jod"
 NEED_NODE=false
+load_nvm
 if ! command -v node >/dev/null 2>&1; then
   NEED_NODE=true
 else
@@ -99,36 +105,41 @@ else
 fi
 if $NEED_NODE; then
   if $DRY_RUN; then
-    echo "[dry-run] se instalaria Node.js >= 18"
+    echo "[dry-run] se instalaria nvm + Node.js $NVM_LTS"
   else
     echo "Node.js >= 18 no encontrado (actual: $(node -v 2>/dev/null || echo 'none'))."
-    echo "  Recomendado: https://nodejs.org/ o nvm (https://github.com/nvm-sh/nvm)"
-    read -p "  Intentar instalar con gestor de paquetes del sistema? [S/n] " INSTALL_NODE
-    if [ "$INSTALL_NODE" != "n" ] && [ "$INSTALL_NODE" != "N" ]; then
-      if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -qq && sudo apt-get install -y nodejs
-      elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y nodejs
-      elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -S --noconfirm nodejs
-      elif command -v brew >/dev/null 2>&1; then
-        brew install node
-      else
-        echo "ERROR: No se pudo instalar Node.js. Instalalo manualmente: https://nodejs.org/"
+    if ! command -v nvm >/dev/null 2>&1 && [ ! -s "$HOME/.nvm/nvm.sh" ]; then
+      read -p "  Instalar nvm + Node.js $NVM_LTS? [S/n] " INSTALL_NVM
+    else
+      load_nvm
+      read -p "  Instalar Node.js $NVM_LTS via nvm? [S/n] " INSTALL_NVM
+    fi
+    if [ "$INSTALL_NVM" != "n" ] && [ "$INSTALL_NVM" != "N" ]; then
+      if [ ! -s "$HOME/.nvm/nvm.sh" ]; then
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+        load_nvm
+      fi
+      if [ ! -s "$HOME/.nvm/nvm.sh" ]; then
+        echo "ERROR: No se pudo cargar nvm. Reinicia la terminal y vuelve a ejecutar setup.sh"
         exit 1
       fi
+      nvm install "$NVM_LTS" || {
+        echo "ERROR: Fallo la instalacion de Node.js. Instalalo manualmente: https://nodejs.org/"
+        exit 1
+      }
+      nvm use "$NVM_LTS"
     else
-      echo "Instala Node.js >= 18 y vuelve a ejecutar setup.sh"
-      echo "  https://nodejs.org/ o nvm install 18"
+      echo "Instala Node.js >= 18 manualmente y vuelve a ejecutar setup.sh"
+      echo "  Recomendado: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
       exit 1
     fi
   fi
 fi
-# Re-validate after potential install
+load_nvm
 NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v//;s/\..*//')
 if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
   echo "ERROR: Node.js >= 18 requerido (actual: $(node -v 2>/dev/null || echo 'none'))."
-  echo "  Instalalo via: https://nodejs.org/ o nvm install 18"
+  echo "  Instalalo via: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
   exit 1
 fi
 
@@ -154,6 +165,7 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 # ── npm ────────────────────────────────────────────
+load_nvm
 if ! command -v npm >/dev/null 2>&1; then
   if $DRY_RUN; then
     echo "[dry-run] se instalaria npm"
@@ -175,6 +187,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 # ── claude ─────────────────────────────────────────
+load_nvm
 if ! command -v claude >/dev/null 2>&1; then
   if $DRY_RUN; then
     echo "[dry-run] se instalaria Claude Code CLI"
