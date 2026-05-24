@@ -94,9 +94,10 @@ load_nvm() {
     . "$NVM_DIR/nvm.sh"
     nvm use default 2>/dev/null || true
     # nvm a veces no exporta PATH correctamente desde una funcion
-    NODE_BIN=$(nvm which default 2>/dev/null | head -1)
+    NODE_BIN=$(nvm which default 2>/dev/null | head -1) || true
     [ -n "$NODE_BIN" ] && export PATH="$(dirname "$NODE_BIN"):$PATH"
   fi
+  true
 }
 NVM_LTS="lts/jod"
 NEED_NODE=false
@@ -130,7 +131,7 @@ if $NEED_NODE; then
         exit 1
       fi
       nvm install "$NVM_LTS" && nvm use "$NVM_LTS" || true
-      NODE_ERR=$(node -v 2>&1 >/dev/null)
+      NODE_ERR=$(node -v 2>&1 >/dev/null) || true
       if echo "$NODE_ERR" | grep -q "GLIBC"; then
         echo "AVISO: El binario de Node.js (nvm) requiere GLIBC 2.28+, no compatible con este sistema."
         if command -v apt-get >/dev/null 2>&1; then
@@ -152,7 +153,7 @@ fi
 if ! node -v >/dev/null 2>&1; then
   load_nvm
 fi
-NODE_ERR=$(node -v 2>&1 >/dev/null)
+NODE_ERR=$(node -v 2>&1 >/dev/null) || true
 NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v//;s/\..*//')
 if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
   if echo "$NODE_ERR" | grep -q "GLIBC"; then
