@@ -40,7 +40,7 @@ Te pedirá la API key de DeepSeek y configura todo automáticamente.
 |---|---|
 | `~/.claude-code-router/proxy.mjs` | Proxy (~140 líneas, Node nativo) |
 | `~/.claude-code-router/proxy.log` | Logs: modelo + tokens por request |
-| `~/.claude-code-router/last-model.txt` | Último modelo enrutado (para status line) |
+| `~/.claude-code-router/last-model/<session-id>` | Último modelo por sesión (para status line aislada) |
 | `~/.claude-code-router/logs.sh` | Visor de logs del proxy (alias de `logs.sh` en el repo) |
 | `~/.claude-code-router/config.json` | Configuración de providers y routing |
 | `~/.claude-code-router/router-config` | CLI para consultar/modificar config.json |

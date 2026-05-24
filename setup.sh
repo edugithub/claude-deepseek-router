@@ -125,7 +125,6 @@ const PORT = config.PORT || 3456;
 const API_KEY = process.env.DEEPSEEK_API_KEY;
 const LOG_PATH = process.env.PROXY_LOG_PATH || path.join(os.homedir(), ".claude-code-router", "proxy.log");
 const TIMEOUT_MS = config.API_TIMEOUT_MS || 600_000;
-const LAST_MODEL_PATH = path.join(os.homedir(), ".claude-code-router", "last-model.txt");
 
 fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
 fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
@@ -182,7 +181,11 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse(raw);
       body.model = pickModel(body);
-      fs.writeFileSync(LAST_MODEL_PATH, body.model);
+      const sid = req.headers["x-claude-code-session-id"];
+      if (sid) {
+        fs.mkdirSync(path.join(os.homedir(), ".claude-code-router", "last-model"), { recursive: true });
+        fs.writeFileSync(path.join(os.homedir(), ".claude-code-router", "last-model", sid), body.model);
+      }
       const provider = providerForModel(body.model);
       const upstreamUrl = provider.api_base_url;
 
@@ -657,7 +660,8 @@ HOOK
   cat > ~/.claude/statusline.sh <<'STATUS'
 #!/bin/bash
 input=$(cat)
-MODEL=$(cat ~/.claude-code-router/last-model.txt 2>/dev/null || echo "$input" | jq -r '.model.display_name // "?"')
+SID=$(echo "$input" | jq -r '.session_id // ""')
+MODEL=$(cat "$HOME/.claude-code-router/last-model/$SID" 2>/dev/null || echo "$input" | jq -r '.model.display_name // "?"')
 DIR=$(echo "$input" | jq -r '.workspace.current_dir // "?"')
 PCT=$(echo "$input" | jq -r '.context_window.used_percentage // 0 | floor')
 IN=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
