@@ -131,17 +131,6 @@ if $NEED_NODE; then
         exit 1
       fi
       nvm install "$NVM_LTS" && nvm use "$NVM_LTS" || true
-      NODE_ERR=$(node -v 2>&1 >/dev/null) || true
-      if echo "$NODE_ERR" | grep -q "GLIBC"; then
-        echo "AVISO: El binario de Node.js (nvm) requiere GLIBC 2.28+, no compatible con este sistema."
-        if command -v apt-get >/dev/null 2>&1; then
-          echo "  Instalando via nodesource (apt)..."
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-          sudo apt-get install -y nodejs
-        elif command -v dnf >/dev/null 2>&1; then
-          sudo dnf install -y nodejs
-        fi
-      fi
     else
       echo "Instala Node.js >= 18 manualmente y vuelve a ejecutar setup.sh"
       echo "  Recomendado: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
@@ -153,20 +142,8 @@ fi
 if ! node -v >/dev/null 2>&1; then
   load_nvm
 fi
-NODE_ERR=$(node -v 2>&1 >/dev/null) || true
 NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v//;s/\..*//')
 if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
-  if echo "$NODE_ERR" | grep -q "GLIBC"; then
-    echo "ERROR: Node.js (nvm) requiere GLIBC 2.28+. Tu sistema tiene una version mas antigua."
-    echo "  Instala Node.js via gestor de paquetes del sistema:"
-    if command -v apt-get >/dev/null 2>&1; then
-      echo "    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -"
-      echo "    sudo apt-get install -y nodejs"
-    elif command -v dnf >/dev/null 2>&1; then
-      echo "    sudo dnf install -y nodejs"
-    fi
-    exit 1
-  fi
   echo "ERROR: Node.js >= 18 requerido (actual: $(node -v 2>/dev/null || echo 'none'))."
   echo "  Instalalo via: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
   exit 1
