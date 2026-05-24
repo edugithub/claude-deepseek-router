@@ -650,7 +650,24 @@ if valid:
 HOOK
   chmod +x ~/.claude/hooks/on-session-start.sh
 
-  # Merge hooks into settings.json (no sobrescribe)
+  # ── statusline.sh ──────────────────────────────────────
+  mkdir -p ~/.claude
+  cat > ~/.claude/statusline.sh <<'STATUS'
+#!/bin/bash
+input=$(cat)
+MODEL=$(echo "$input" | jq -r '.model.display_name')
+PCT=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
+BAR_WIDTH=10
+FILLED=$((PCT * BAR_WIDTH / 100))
+EMPTY=$((BAR_WIDTH - FILLED))
+BAR=""
+[ "$FILLED" -gt 0 ] && printf -v FILL "%${FILLED}s" && BAR="${FILL// /▓}"
+[ "$EMPTY" -gt 0 ] && printf -v PAD "%${EMPTY}s" && BAR="${BAR}${PAD// /░}"
+echo "[$MODEL] $BAR $PCT%"
+STATUS
+  chmod +x ~/.claude/statusline.sh
+
+  # Merge hooks and statusline into settings.json (no sobrescribe)
   python3 -c "
 import json, os
 
@@ -698,10 +715,17 @@ for event, our_triggers in our_hooks.items():
         if not already:
             existing.append(ot)
 
+# Status line
+cfg['statusLine'] = {
+    'type': 'command',
+    'command': os.path.expanduser('~/.claude/statusline.sh'),
+    'padding': 2
+}
+
 os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
 with open(cfg_path, 'w') as f:
     json.dump(cfg, f, indent=2)
-print('[ok] hooks merged into settings.json')
+print('[ok] hooks and statusline merged into settings.json')
 "
 fi
 
