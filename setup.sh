@@ -573,11 +573,15 @@ SESSIONS_FILE="$ROOT/.claude/sessions.json"
 CHANGELOG="$ROOT/.claude-change-log.md"
 
 if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-  echo "## $DATE — $BRANCH" >> "$CHANGELOG"
-  echo '```' >> "$CHANGELOG"
-  git diff --stat HEAD 2>/dev/null >> "$CHANGELOG"
-  echo '```' >> "$CHANGELOG"
-  echo "" >> "$CHANGELOG"
+  UNSTAGED=$(git diff --name-only 2>/dev/null | grep -v '^.claude-change-log.md$' || true)
+  STAGED=$(git diff --cached --name-only 2>/dev/null | grep -v '^.claude-change-log.md$' || true)
+  if [ -n "$UNSTAGED" ] || [ -n "$STAGED" ]; then
+    echo "## $DATE — $BRANCH" >> "$CHANGELOG"
+    echo '```' >> "$CHANGELOG"
+    git diff --stat HEAD 2>/dev/null | grep -v '.claude-change-log.md' >> "$CHANGELOG"
+    echo '```' >> "$CHANGELOG"
+    echo "" >> "$CHANGELOG"
+  fi
 fi
 
 SID=$(echo "$STDIN" | python3 -c "
@@ -673,11 +677,15 @@ LOG="$ROOT/.claude-change-log.md"
 BRANCH=$(git branch --show-current 2>/dev/null)
 DATE=$(date '+%Y-%m-%d %H:%M')
 if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-  echo "## $DATE — $BRANCH (checkout)" >> "$LOG"
-  echo '```' >> "$LOG"
-  git diff --stat HEAD 2>/dev/null >> "$LOG"
-  echo '```' >> "$LOG"
-  echo "" >> "$LOG"
+  UNSTAGED=$(git diff --name-only 2>/dev/null | grep -v '^.claude-change-log.md$' || true)
+  STAGED=$(git diff --cached --name-only 2>/dev/null | grep -v '^.claude-change-log.md$' || true)
+  if [ -n "$UNSTAGED" ] || [ -n "$STAGED" ]; then
+    echo "## $DATE — $BRANCH (checkout)" >> "$LOG"
+    echo '```' >> "$LOG"
+    git diff --stat HEAD 2>/dev/null | grep -v '.claude-change-log.md' >> "$LOG"
+    echo '```' >> "$LOG"
+    echo "" >> "$LOG"
+  fi
 fi
 HOOK
   chmod +x ~/.claude/hooks/on-checkout.sh

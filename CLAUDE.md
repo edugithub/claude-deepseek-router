@@ -46,7 +46,7 @@ El threshold se configura en `config.json` via `Router.longContextThreshold`. El
   - `on-stop.sh` — registra git diff + guarda metadata de sesión al cerrar
   - `on-checkout.sh` — registra cambios antes de git checkout
   - `on-session-start.sh` — avisa cambios pendientes + ofrece retomar sesiones
-- **Change log**: `.claude-change-log.md` — diff log de cambios entre sesiones
+- **Change log**: `.claude-change-log.md` — diff log de cambios entre sesiones. Solo registra cambios en archivos del proyecto (excluye cambios al propio `.claude-change-log.md`)
 - **Sesiones**: `.claude/sessions.json` — historial de sesiones (últimas 20)
 - **Logs del proxy**: `~/.claude-code-router/proxy.log` — escritura directa con `fs.writeSync` (sin buffering)
 - **Status line**: Muestra modelo, directorio, tokens totales (in/out), % de contexto con barra visual y nivel de esfuerzo
