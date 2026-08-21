@@ -326,6 +326,10 @@ const server = http.createServer(async (req, res) => {
       if (sid) {
         fs.mkdirSync(path.join(os.homedir(), ".claude-code-router", "last-model"), { recursive: true });
         fs.writeFileSync(path.join(os.homedir(), ".claude-code-router", "last-model", sid), body.model);
+        const effortLabel = body.reasoning?.effort ? `R:${body.reasoning.effort}` : (body.thinking?.type === "disabled" ? "no-thinking" : "-");
+        const effDir = path.join(os.homedir(), ".claude-code-router", "last-effort");
+        fs.mkdirSync(effDir, { recursive: true });
+        fs.writeFileSync(path.join(effDir, sid), effortLabel);
       }
       const provider = providerForModel(body.model);
       const upstreamUrl = provider.api_base_url;
@@ -813,21 +817,42 @@ HOOK
   mkdir -p ~/.claude
   cat > ~/.claude/statusline.sh <<'STATUS'
 #!/bin/bash
+# ── status line for Claude Code ──────────────────────────────────────────────
+
 input=$(cat)
-SID=$(echo "$input" | jq -r '.session_id // ""')
-MODEL=$(cat "$HOME/.claude-code-router/last-model/$SID" 2>/dev/null || echo "$input" | jq -r '.model.display_name // "?"')
-DIR=$(echo "$input" | jq -r '.workspace.current_dir // "?"')
-PCT=$(echo "$input" | jq -r '.context_window.used_percentage // 0 | floor')
-IN=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
-OUT=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0')
-EFFORT=$(echo "$input" | jq -r '.effort.level // "?"')
-BAR_SIZE=10
-FILL=$((PCT * BAR_SIZE / 100))
-BAR=""
-for ((i=0; i<BAR_SIZE; i++)); do
-  if [ $i -lt $FILL ]; then BAR="${BAR}█"; else BAR="${BAR}░"; fi
+
+# ── parse input ──────────────────────────────────────────────────────────────
+sid=$(jq -r '.session_id // ""' <<<"$input")
+dir=$(jq -r '.workspace.current_dir // ""' <<<"$input")
+model=$(cat "$HOME/.claude-code-router/last-model/$sid" 2>/dev/null \
+        || jq -r '.model.display_name // "?"' <<<"$input")
+pct=$(jq -r '.context_window.used_percentage // 0 | floor' <<<"$input")
+in_=$(jq -r '.context_window.total_input_tokens // 0' <<<"$input")
+out=$(jq -r '.context_window.total_output_tokens // 0' <<<"$input")
+eff=$(cat "$HOME/.claude-code-router/last-effort/$sid" 2>/dev/null || echo "-")
+# ── git branch + worktree detection ──────────────────────────────────────────
+branch=""; wt=""
+if git -C "$dir" rev-parse --is-inside-work-tree &>/dev/null; then
+  branch=$(git -C "$dir" branch --show-current 2>/dev/null)
+  git -C "$dir" rev-parse --git-common-dir 2>/dev/null | grep -q worktrees && wt=" ⊞"
+fi
+
+# ── progress bar (10 blocks) ────────────────────────────────────────────────
+fill=$((pct * 10 / 100)); bar=""
+for ((i=0; i<10; i++)); do
+  [[ $i -lt $fill ]] && bar+="▰" || bar+="▱"
 done
-echo "[$MODEL] 📁 ${DIR##*/} | in:${IN} out:${OUT} | ${PCT}% ${BAR} | ⚡${EFFORT}"
+
+# ── format tokens ────────────────────────────────────────────────────────────
+fmt() { awk -v n="$1" 'BEGIN{printf "%.1f", n/1000}'; }
+in_fmt=$(fmt "$in_")
+out_fmt=$(fmt "$out")
+
+# ── assemble output ──────────────────────────────────────────────────────────
+git_part=""
+[[ -n "$branch" ]] && git_part="⎇ ${branch}${wt}  "
+
+echo "${git_part}${bar}  ${pct}%  ·  ${in_fmt}k in  ${out_fmt}k out  ·  ${eff}  [${model}]"
 STATUS
   chmod +x ~/.claude/statusline.sh
 
