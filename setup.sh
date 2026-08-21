@@ -258,22 +258,32 @@ function providerForModel(model) {
   return defaultProvider();
 }
 
-function pickModel(body) {
+function pickModel(body, contextTokens) {
   if (body?.reasoning?.effort) {
     return parseRouter(config.Router?.think).model;
   }
-  const json = JSON.stringify(body?.messages ?? "");
   const threshold = config.Router?.longContextThreshold ?? 60_000;
-  if (json.length / 4 > threshold) {
+  // Prefer the real usage tracked from previous responses for this session;
+  // fall back to a rough char/4 estimate when we haven't seen a response yet.
+  const ctx = (contextTokens != null)
+    ? contextTokens
+    : (JSON.stringify(body?.messages ?? "").length / 4);
+  if (ctx > threshold) {
     return parseRouter(config.Router?.longContext).model;
   }
   return parseRouter(config.Router?.default).model;
 }
 
+// Real context usage per session, tracked from the provider's response usage
+// (input + cache_read + cache_creation). Keyed by x-claude-code-session-id.
+const contextBySession = new Map();
+
 // Detect plan mode: Claude Code injects a "Plan mode is active" system message
-// into messages[] only while in plan mode.
+// into messages[]. It lingers after exiting plan mode (until compaction), so
+// only check the most recent messages to avoid false positives in normal mode.
 function isPlanMode(body) {
-  return (body?.messages || []).some(
+  const msgs = body?.messages || [];
+  return msgs.slice(-10).some(
     (m) => m?.role === "system" && /Plan mode is active/i.test(
       typeof m.content === "string" ? m.content : JSON.stringify(m.content || [])
     )
@@ -310,8 +320,9 @@ const server = http.createServer(async (req, res) => {
           body.thinking = { type: "disabled" };
         }
       }
-      body.model = pickModel(body);
       const sid = req.headers["x-claude-code-session-id"];
+      const contextTokens = sid ? contextBySession.get(sid) : null;
+      body.model = pickModel(body, contextTokens);
       if (sid) {
         fs.mkdirSync(path.join(os.homedir(), ".claude-code-router", "last-model"), { recursive: true });
         fs.writeFileSync(path.join(os.homedir(), ".claude-code-router", "last-model", sid), body.model);
@@ -340,7 +351,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(upstream.status, resHeaders);
 
       if (contentType.includes("text/event-stream")) {
-        let inputTokens = 0, outputTokens = 0, cacheTokens = 0;
+        let inputTokens = 0, outputTokens = 0, cacheRead = 0, cacheCreation = 0;
         const reader = upstream.body.getReader();
         const decoder = new TextDecoder();
 
@@ -354,7 +365,8 @@ const server = http.createServer(async (req, res) => {
                 const data = JSON.parse(line.slice(6));
                 if (data.type === "message_start" && data.message?.usage) {
                   inputTokens = data.message.usage.input_tokens || 0;
-                  cacheTokens = data.message.usage.cache_read_input_tokens || 0;
+                  cacheRead = data.message.usage.cache_read_input_tokens || 0;
+                  cacheCreation = data.message.usage.cache_creation_input_tokens || 0;
                 }
                 if (data.type === "message_delta" && data.usage) {
                   outputTokens = data.usage.output_tokens || 0;
@@ -364,13 +376,15 @@ const server = http.createServer(async (req, res) => {
           }
           res.write(chunk);
         }
-        log(`[proxy] >> ${body.model} | in:${inputTokens} out:${outputTokens} cache:${cacheTokens}`);
+        if (sid) contextBySession.set(sid, inputTokens + cacheRead + cacheCreation);
+        log(`[proxy] >> ${body.model} | in:${inputTokens} out:${outputTokens} cache:${cacheRead}`);
         res.end();
       } else {
         const text = await upstream.text();
         try {
           const u = JSON.parse(text).usage;
           if (u) {
+            if (sid) contextBySession.set(sid, (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0));
             log(`[proxy] >> ${body.model} | in:${u.input_tokens} out:${u.output_tokens} cache:${u.cache_read_input_tokens || 0}`);
           }
         } catch (_) {}
