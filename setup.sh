@@ -259,7 +259,7 @@ function providerForModel(model) {
 }
 
 function pickModel(body) {
-  if (body?.thinking?.type === "enabled") {
+  if (body?.reasoning?.effort) {
     return parseRouter(config.Router?.think).model;
   }
   const json = JSON.stringify(body?.messages ?? "");
@@ -268,6 +268,16 @@ function pickModel(body) {
     return parseRouter(config.Router?.longContext).model;
   }
   return parseRouter(config.Router?.default).model;
+}
+
+// Detect plan mode: Claude Code injects a "Plan mode is active" system message
+// into messages[] only while in plan mode.
+function isPlanMode(body) {
+  return (body?.messages || []).some(
+    (m) => m?.role === "system" && /Plan mode is active/i.test(
+      typeof m.content === "string" ? m.content : JSON.stringify(m.content || [])
+    )
+  );
 }
 
 let logFd = fs.openSync(LOG_PATH, "a");
@@ -293,6 +303,13 @@ const server = http.createServer(async (req, res) => {
   req.on("end", async () => {
     try {
       const body = JSON.parse(raw);
+      if (config.Router?.thinking === "plan") {
+        if (isPlanMode(body)) {
+          body.reasoning = { effort: config.Router?.planEffort || "high" };
+        } else {
+          body.thinking = { type: "disabled" };
+        }
+      }
       body.model = pickModel(body);
       const sid = req.headers["x-claude-code-session-id"];
       if (sid) {
@@ -386,7 +403,9 @@ cat > ~/.claude-code-router/config.json <<CONFIG
     "background": "deepseek,$BACKGROUND_MODEL",
     "think": "deepseek,$THINK_MODEL",
     "longContext": "deepseek,$LONGCONTEXT_MODEL",
-    "longContextThreshold": 30000
+    "longContextThreshold": 500000,
+    "thinking": "plan",
+    "planEffort": "high"
   }
 }
 CONFIG
@@ -665,7 +684,7 @@ sessions = sessions[:20]
 os.makedirs(os.path.dirname(f), exist_ok=True)
 with open(f, 'w') as fh:
     json.dump(sessions, fh, ensure_ascii=False, indent=2)
-" 2>/dev/null
+" 2>/dev/null || true
 HOOK
   chmod +x ~/.claude/hooks/on-stop.sh
 
@@ -757,7 +776,7 @@ if valid:
     print('Como PRIMER mensaje, usa la herramienta AskUserQuestion con estas opciones:')
     print()
     opts = []
-    for s in valid[:4]:
+    for s in valid[:3]:
         label = s['title'][:60]
         sid = s['id']
         opts.append({
@@ -766,13 +785,13 @@ if valid:
             'resume_id': sid
         })
     print('PREGUNTA: \"Quieres retomar alguna sesion anterior?\"')
-    print('OPCIONES:')
+    print('OPCIONES: (header obligatorio, max 4 items)')
     for i, o in enumerate(opts):
         print(f\"  {i+1}. {o['label']} ({o['description']}) -> /resume {o['resume_id']}\")
-    print('OPCION_EXTRA: \"No, empezar nueva sesion\"')
+    print(f\"  {len(opts)+1}. No, empezar nueva sesion\")
     print()
     print('IMPORTANTE: Usa AskUserQuestion YA MISMO, no esperes a que el usuario escriba.')
-" 2>/dev/null
+" 2>/dev/null || true
 HOOK
   chmod +x ~/.claude/hooks/on-session-start.sh
 
@@ -830,6 +849,14 @@ if cfg:
         json.dump(cfg, f, indent=2)
 
 cfg.setdefault('hooks', {})
+
+# Clean old-style PreToolUse entries that fire on every Bash command
+ptu = cfg['hooks'].get('PreToolUse', [])
+cfg['hooks']['PreToolUse'] = [
+    e for e in ptu
+    if not (e.get('matcher') == 'Bash' and 'if' not in e
+            and any('on-checkout.sh' in h.get('command', '') for h in e.get('hooks', [])))
+]
 
 for event, our_triggers in our_hooks.items():
     existing = cfg['hooks'].setdefault(event, [])
