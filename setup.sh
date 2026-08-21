@@ -263,12 +263,12 @@ function pickModel(body, contextTokens) {
     return parseRouter(config.Router?.think).model;
   }
   const threshold = config.Router?.longContextThreshold ?? 60_000;
-  // Prefer the real usage tracked from previous responses for this session;
-  // fall back to a rough char/4 estimate when we haven't seen a response yet.
-  const ctx = (contextTokens != null)
-    ? contextTokens
-    : (JSON.stringify(body?.messages ?? "").length / 4);
-  if (ctx > threshold) {
+  // Use the real usage tracked from previous responses when available;
+  // otherwise start on the lower-cost model (flash) until we have a response.
+  if (contextTokens == null) {
+    return parseRouter(config.Router?.default).model;
+  }
+  if (contextTokens > threshold) {
     return parseRouter(config.Router?.longContext).model;
   }
   return parseRouter(config.Router?.default).model;
