@@ -30,6 +30,7 @@ Que hace:
      - Stop: registra cambios al salir (por rama)
      - SessionStart: avisa si hay cambios sin procesar para CLAUDE.md
      - PreToolUse: registra cambios antes de git checkout
+  6. Instala skills globales en ~/.claude/skills/ (coding-workflow, refactoring, debugging)
 
 Requisitos: Node.js >= 18, Claude Code CLI, DeepSeek API key
 EOF
@@ -924,6 +925,18 @@ with open(cfg_path, 'w') as f:
     json.dump(cfg, f, indent=2)
 print('[ok] hooks and statusline merged into settings.json')
 "
+fi
+
+# ── skills globales ────────────────────────────────────
+SKILLS_SRC="$(dirname "$0")/skills"
+if [ -d "$SKILLS_SRC" ]; then
+  if $DRY_RUN; then
+    echo "[dry-run] se instalarian skills globales en ~/.claude/skills/"
+  else
+    mkdir -p ~/.claude/skills
+    cp -R "$SKILLS_SRC"/. ~/.claude/skills/
+    echo "[ok] skills globales instalados en ~/.claude/skills/"
+  fi
 fi
 
 # ── .zshrc / .bashrc ─────────────────────────────────
