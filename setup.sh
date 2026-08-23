@@ -291,6 +291,36 @@ function isPlanMode(body) {
   );
 }
 
+// ── balance ───────────────────────────────────────────
+// Consulta el saldo de DeepSeek (GET /user/balance) escribiendo el resultado a
+// last-balance. Fire-and-forget y asincrono: nunca bloquea el enrutado de
+// requests (no va en el camino caliente). Endpoint gratuito (no consume tokens
+// de modelo), por lo que se refresca en cada request sin throttling.
+const BALANCE_PATH = path.join(os.homedir(), ".claude-code-router", "last-balance");
+
+async function refreshBalance() {
+  if (!API_KEY) return;
+  try {
+    const res = await fetch("https://api.deepseek.com/user/balance", {
+      headers: {
+        "Accept": "application/json",
+        "Authorization": "Bearer " + API_KEY,
+      },
+    });
+    if (!res.ok) throw new Error("balance HTTP " + res.status);
+    const data = await res.json();
+    fs.mkdirSync(path.dirname(BALANCE_PATH), { recursive: true });
+    fs.writeFileSync(BALANCE_PATH, JSON.stringify({
+      updated: new Date().toISOString(),
+      is_available: data.is_available,
+      balance_infos: data.balance_infos,
+    }));
+  } catch (e) {
+    // Falla silenciosa: el balance es un dato no critico, jamas debe romper el proxy.
+    log(`[proxy] balance warn: ${e.message}`);
+  }
+}
+
 let logFd = fs.openSync(LOG_PATH, "a");
 
 function log(msg) {
@@ -334,6 +364,9 @@ const server = http.createServer(async (req, res) => {
       }
       const provider = providerForModel(body.model);
       const upstreamUrl = provider.api_base_url;
+
+      // Disparar refresco de balance en background (no bloquea; throttle por cache).
+      refreshBalance();
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -831,6 +864,15 @@ pct=$(jq -r '.context_window.used_percentage // 0 | floor' <<<"$input")
 in_=$(jq -r '.context_window.total_input_tokens // 0' <<<"$input")
 out=$(jq -r '.context_window.total_output_tokens // 0' <<<"$input")
 eff=$(cat "$HOME/.claude-code-router/last-effort/$sid" 2>/dev/null || echo "-")
+# ── balance (leido del cache del proxy; sin llamadas de red) ─────────────────
+bal=""
+if [ -f "$HOME/.claude-code-router/last-balance" ]; then
+  bal=$(jq -r '
+    if .is_available == false then "AGOTADO"
+    else (.balance_infos[]? | select(.currency=="USD") | .total_balance) // "?"
+    end' "$HOME/.claude-code-router/last-balance" 2>/dev/null)
+  [ -n "$bal" ] && bal="\$ ${bal}"
+fi
 # ── git branch + worktree detection ──────────────────────────────────────────
 branch=""; wt=""
 if git -C "$dir" rev-parse --is-inside-work-tree &>/dev/null; then
@@ -852,8 +894,9 @@ out_fmt=$(fmt "$out")
 # ── assemble output ──────────────────────────────────────────────────────────
 git_part=""
 [[ -n "$branch" ]] && git_part="⎇ ${branch}${wt}  "
+[[ -n "$bal" ]] && bal_part="  ·  ${bal}" || bal_part=""
 
-echo "${git_part}${bar}  ${pct}%  ·  ${in_fmt}k in  ${out_fmt}k out  ·  ${eff}  [${model}]"
+echo "${git_part}${bar}  ${pct}%  ·  ${in_fmt}k in  ${out_fmt}k out  ·  ${eff}  [${model}]${bal_part}"
 STATUS
   chmod +x ~/.claude/statusline.sh
 
