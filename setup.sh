@@ -14,7 +14,8 @@ Config flags (optional):
   --default-model <m>      model for normal requests (default: deepseek-v4-flash)
   --think-model <m>        model for thinking (default: deepseek-v4-pro)
   --longcontext-model <m>  model for long context (default: deepseek-v4-pro)
-  --background-model <m>   model for background tasks (default: deepseek-v4-pro)
+  --background-model <m>   model for background tasks (reserved: no signal detected
+                           yet; traffic uses default routing today)
   --provider-url <url>     provider API base URL
   --provider-models <list> provider models, comma-separated
 
@@ -44,6 +45,9 @@ NO_HOOKS=false
 DEFAULT_MODEL="deepseek-v4-flash"
 THINK_MODEL="deepseek-v4-pro"
 LONGCONTEXT_MODEL="deepseek-v4-pro"
+# Reserved: background requests cannot be detected reliably (no field/header from
+# Claude Code), so this config is NOT read by pickModel today. Kept for when a
+# signal exists. Background traffic follows the default flash routing.
 BACKGROUND_MODEL="deepseek-v4-pro"
 PROVIDER_URL="https://api.deepseek.com/anthropic/v1/messages"
 PROVIDER_MODELS="deepseek-v4-flash,deepseek-v4-pro"
@@ -519,6 +523,9 @@ server.listen(PORT, () => log(`proxy >> http://127.0.0.1:${PORT}`));
 
 PROXY
 # ── config.json ───────────────────────────────────────
+# NOTE: "background" is RESERVED (no background signal detected from Claude Code;
+# pickModel does not read it). Kept in config for future use. Do not add JSON
+# comments inside the heredoc below — it must stay valid JSON.
 write_file ~/.claude-code-router/config.json <<CONFIG
 {
   "PORT": 3456,
