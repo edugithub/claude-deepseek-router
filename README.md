@@ -19,8 +19,6 @@ The proxy inspects each request and decides the model:
 | Real context > `longContextThreshold` (500K) | `deepseek-v4-pro` |
 | Plan mode active (`/plan`) | `deepseek-v4-pro` + `reasoning.effort` |
 
-> **Note on background tasks:** the proxy has **no reliable way to detect background requests**. Verified empirically: a Claude Code background/subtask request carries no `body.background` field, no `claude_extras`, and the same `session_id` as the main conversation. They fall back to the default routing (flash, or pro if the context exceeds the threshold). `Router.background` in `config.json` is **reserved/unused** until a distinguishable signal exists.
-
 ### Behavior details
 
 - **Per-session real context**: the proxy sums `input + cache_read + cache_creation` from the `usage` DeepSeek returns in each response, and stores it keyed by `x-claude-code-session-id`. Routing therefore uses the *real* context (not estimated) after the first response. On startup (no data yet) it goes to `flash`.

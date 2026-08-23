@@ -38,8 +38,6 @@ The proxy code is generated from `setup.sh` (here-doc), there is no standalone f
 
 The threshold is configured in `config.json` via `Router.longContextThreshold`. The installed default is 500K.
 
-**Background routing (reserved):** the proxy has no reliable way to detect background/subtask requests — verified empirically (no `body.background`, no `claude_extras`, same `session_id` as main). `Router.background` and the `--background-model` flag are **reserved/unused**; background traffic follows default routing (flash, or pro over threshold). Revisit only if a distinguishable signal appears.
-
 `setup.sh` reuses an existing `~/.claude-code-router/.env` as defaults, so a machine that already has it installs without re-entering credentials.
 
 ## Conventions
