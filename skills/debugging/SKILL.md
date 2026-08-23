@@ -55,7 +55,8 @@ Distinguish between:
 
 Base the diagnosis on evidence whenever possible.
 
-Before changing code, have a concrete hypothesis about why the failure occurs.
+Before changing code, have a concrete hypothesis about why the failure occurs. Before changing code, have a concrete hypothesis about why the failure occurs. Prefer experiments that distinguish between competing hypotheses before modifying production code.
+
 
 ## 4. Apply the smallest correct fix
 
