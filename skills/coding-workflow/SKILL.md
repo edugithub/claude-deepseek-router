@@ -16,7 +16,7 @@ Pick the category that best fits:
 - **Refactoring**: structure, responsibilities, interfaces, dependencies, architecture, or component boundaries change → also use the `refactoring` skill.
 - **Debugging**: bugs, failing tests, runtime errors, unexpected behaviour, regressions, integration failures → also use the `debugging` skill.
 
-If several apply, apply all relevant protocols. Before editing, read the relevant implementation and search for usages/callers — do not assume the file the user named is the only one affected.
+If several apply, apply all relevant protocols. Before editing, read the relevant implementation and search for usages/callers — do not assume the file the user named is the only one affected. Do not infer project behaviour when it can be verified from the codebase, tests, configuration, or tooling. Prefer evidence over assumptions.
 
 ## 2. Make the smallest complete change
 
