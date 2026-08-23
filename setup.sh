@@ -51,6 +51,8 @@ LONGCONTEXT_MODEL="deepseek-v4-pro"
 BACKGROUND_MODEL="deepseek-v4-pro"
 PROVIDER_URL="https://api.deepseek.com/anthropic/v1/messages"
 PROVIDER_MODELS="deepseek-v4-flash,deepseek-v4-pro"
+# Auto-compact window (tokens) para Claude Code CLI; editable via ~/.claude-code-router/.env
+AUTO_COMPACT_WINDOW="786432"
 FLAGS_SET=false
 
 while [ $# -gt 0 ]; do
@@ -97,6 +99,7 @@ load_env_defaults() {
       ANTHROPIC_DEFAULT_OPUS_MODEL)  [ -z "$THINK_MODEL" ] && THINK_MODEL="${v//\'/}" ;;
       ANTHROPIC_DEFAULT_SONNET_MODEL) [ -z "$DEFAULT_MODEL" ] && DEFAULT_MODEL="${v//\'/}" ;;
       ANTHROPIC_DEFAULT_HAIKU_MODEL)  [ -z "$LONGCONTEXT_MODEL" ] && LONGCONTEXT_MODEL="${v//\'/}" ;;
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW) [ -z "$AUTO_COMPACT_WINDOW" ] && AUTO_COMPACT_WINDOW="${v//\'/}" ;;
     esac
   done < "$ENV_PATH"
 }
@@ -277,6 +280,7 @@ ANTHROPIC_DEFAULT_SONNET_MODEL=$DEFAULT_MODEL
 ANTHROPIC_DEFAULT_HAIKU_MODEL=$DEFAULT_MODEL
 CLAUDE_CODE_SUBAGENT_MODEL=$DEFAULT_MODEL
 CLAUDE_CODE_EFFORT_LEVEL=auto
+CLAUDE_CODE_AUTO_COMPACT_WINDOW=$AUTO_COMPACT_WINDOW
 ENV
 
 # ── proxy ────────────────────────────────────────────
