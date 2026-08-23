@@ -3,3 +3,8 @@
 .claude-change-log.md
 .claude-change-log.md.*
 .claude/sessions.json
+
+# credenciales / env local (NO commitnear)
+.env
+.env.*
+!.env.example

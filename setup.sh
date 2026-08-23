@@ -65,9 +65,46 @@ done
 echo "=== Claude Code + DeepSeek Router Setup ==="
 $DRY_RUN && echo "[DRY RUN — no se modificara nada]" && set +e
 
+# Funciones de escritura que respetan --dry-run. Todos los heredocs (<<DELIM)
+# pasan por aqui: en dry-run se muestra que se haria pero NO se escribe.
+write_file() { if $DRY_RUN; then echo "[dry-run] se escribiria: $1"; else cat > "$1"; fi; }
+append_file() { if $DRY_RUN; then echo "[dry-run] se anadiria a: $1"; else cat >> "$1"; fi; }
+
+# ── .env fuente: reutilizar si ya existe ──────────────
+# En Camino B, ~/.claude-code-router/.env es la fuente de verdad. Si ya existe
+# (de una instalacion previa o porque se copio a otra maquina), lo leemos como
+# defaults y no volvemos a pedir la key. Los flags explícitos siguen mandando.
+ENV_PATH="$HOME/.claude-code-router/.env"
+ENV_EXISTS=false
+load_env_defaults() {
+  [ -f "$ENV_PATH" ] || return 0
+  ENV_EXISTS=true
+  local k v
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    [ -z "$line" ] && continue
+    k="${line%%=*}"; v="${line#*=}"
+    k="${k//[[:space:]]/}"; v="${v//[[:space:]]/}"
+    [ -z "$k" ] && continue
+    case "$k" in
+      DEEPSEEK_API_KEY)        [ -z "$DS_KEY" ] && DS_KEY="${v//\'/}" ;;
+      ANTHROPIC_DEFAULT_OPUS_MODEL)  [ -z "$THINK_MODEL" ] && THINK_MODEL="${v//\'/}" ;;
+      ANTHROPIC_DEFAULT_SONNET_MODEL) [ -z "$DEFAULT_MODEL" ] && DEFAULT_MODEL="${v//\'/}" ;;
+      ANTHROPIC_DEFAULT_HAIKU_MODEL)  [ -z "$LONGCONTEXT_MODEL" ] && LONGCONTEXT_MODEL="${v//\'/}" ;;
+    esac
+  done < "$ENV_PATH"
+}
+load_env_defaults
+if $ENV_EXISTS && ! $FLAGS_SET; then
+  echo "→ .env existente detectado (~/.claude-code-router/.env). Reusando configuración."
+fi
+
 # ── API key ──────────────────────────────────────────
 if $DRY_RUN; then
   DS_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+elif $ENV_EXISTS && [ -n "$DS_KEY" ] && [ "$DS_KEY" != "sk-xxxxxxxxxxxxxxxxxxxxxxxx" ]; then
+  read -p "DeepSeek API key [ya en .env, Enter para mantener]: " INPUT
+  [ -n "$INPUT" ] && DS_KEY="$INPUT"
 else
   read -p "DeepSeek API key: " DS_KEY
 fi
@@ -220,12 +257,53 @@ fi
 # ── dirs ─────────────────────────────────────────────
 mkdir -p ~/.claude-code-router ~/.claude/hooks
 
+# ── .env (fuente de credenciales y de los defaults del CLI) ──────────────
+write_file ~/.claude-code-router/.env <<ENV
+# Fuente de verdad de credenciales/config del proxy Claude Code + DeepSeek Router.
+# Lo consume el proxy (proxy.mjs) y setup.sh para generar el bloque "env" de
+# settings.json (las variables que necesita Claude Code). NO se commitnea.
+DEEPSEEK_API_KEY='$DS_KEY'
+ANTHROPIC_AUTH_TOKEN='$DS_KEY'
+ANTHROPIC_BASE_URL=http://127.0.0.1:3456
+ANTHROPIC_MODEL=$THINK_MODEL
+ANTHROPIC_DEFAULT_OPUS_MODEL=$THINK_MODEL
+ANTHROPIC_DEFAULT_SONNET_MODEL=$DEFAULT_MODEL
+ANTHROPIC_DEFAULT_HAIKU_MODEL=$DEFAULT_MODEL
+CLAUDE_CODE_SUBAGENT_MODEL=$DEFAULT_MODEL
+CLAUDE_CODE_EFFORT_LEVEL=auto
+ENV
+
 # ── proxy ────────────────────────────────────────────
-cat > ~/.claude-code-router/proxy.mjs <<'PROXY'
+write_file ~/.claude-code-router/proxy.mjs <<'PROXY'
 import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+// Cargar variables del fichero .env (junto al proxy) si existe. Se aplican SOLO
+// si la variable no esta ya en el entorno (el proceso env tiene prioridad). Esto
+// permite que el proxy funcione sin depender de exports del shell.
+function loadDotEnv() {
+  try {
+    const envPath = path.join(os.homedir(), ".claude-code-router", ".env");
+    const raw = fs.readFileSync(envPath, "utf-8");
+    for (let line of raw.split("\n")) {
+      line = line.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq === -1) continue;
+      let key = line.slice(0, eq).trim();
+      let val = line.slice(eq + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (!(key in process.env)) process.env[key] = val;
+    }
+  } catch {
+    /* .env opcional; usa process.env */
+  }
+}
+loadDotEnv();
 
 const CONFIG_PATH = path.join(os.homedir(), ".claude-code-router", "config.json");
 let config;
@@ -439,7 +517,7 @@ server.listen(PORT, () => log(`proxy >> http://127.0.0.1:${PORT}`));
 
 PROXY
 # ── config.json ───────────────────────────────────────
-cat > ~/.claude-code-router/config.json <<CONFIG
+write_file ~/.claude-code-router/config.json <<CONFIG
 {
   "PORT": 3456,
   "API_TIMEOUT_MS": 600000,
@@ -463,7 +541,7 @@ cat > ~/.claude-code-router/config.json <<CONFIG
 CONFIG
 
 # ── rotate-logs.sh ────────────────────────────────────
-cat > ~/.claude-code-router/rotate-logs.sh <<'ROTATE'
+write_file ~/.claude-code-router/rotate-logs.sh <<'ROTATE'
 #!/bin/bash
 PID=$(pgrep -f "proxy.mjs" | head -1)
 if [ -z "$PID" ]; then
@@ -481,7 +559,7 @@ chmod +x ~/.claude-code-router/rotate-logs.sh
 install -m 755 "$(dirname "$0")/logs.sh" ~/.claude-code-router/logs.sh 2>/dev/null || true
 
 # ── router-config CLI ──────────────────────────────────
-cat > ~/.claude-code-router/router-config <<'RCCLI'
+write_file ~/.claude-code-router/router-config <<'RCCLI'
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
@@ -634,7 +712,7 @@ else
   mkdir -p ~/.claude/hooks
 
   # on-stop: registra cambios + guarda metadata de sesion
-  cat > ~/.claude/hooks/on-stop.sh <<'HOOK'
+  write_file ~/.claude/hooks/on-stop.sh <<'HOOK'
 #!/bin/bash
 STDIN=$(cat)
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
@@ -741,7 +819,7 @@ HOOK
   chmod +x ~/.claude/hooks/on-stop.sh
 
   # on-checkout: registra cambios antes de cambiar de rama
-  cat > ~/.claude/hooks/on-checkout.sh <<'HOOK'
+  write_file ~/.claude/hooks/on-checkout.sh <<'HOOK'
 #!/bin/bash
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 LOG="$ROOT/.claude-change-log.md"
@@ -762,7 +840,7 @@ HOOK
   chmod +x ~/.claude/hooks/on-checkout.sh
 
   # on-session-start: avisa cambios + sesiones recientes
-  cat > ~/.claude/hooks/on-session-start.sh <<'HOOK'
+  write_file ~/.claude/hooks/on-session-start.sh <<'HOOK'
 #!/bin/bash
 STDIN=$(cat)
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
@@ -849,7 +927,7 @@ HOOK
 
   # ── statusline.sh ──────────────────────────────────────
   mkdir -p ~/.claude
-  cat > ~/.claude/statusline.sh <<'STATUS'
+  write_file ~/.claude/statusline.sh <<'STATUS'
 #!/bin/bash
 # ── status line for Claude Code ──────────────────────────────────────────────
 
@@ -901,7 +979,7 @@ STATUS
   chmod +x ~/.claude/statusline.sh
 
   # Merge hooks and statusline into settings.json (no sobrescribe)
-  python3 -c "
+  SETUP_DRY_RUN=$DRY_RUN python3 -c "
 import json, os
 
 # Hooks que instalamos
@@ -963,10 +1041,43 @@ cfg['statusLine'] = {
     'padding': 2
 }
 
+# Env vars que necesita Claude Code, generadas desde ~/.claude-code-router/.env
+# (fuente de verdad). Asi el CLI no depende de exports del shell.
+try:
+    env_cfg = {}
+    env_path = os.path.expanduser('~/.claude-code-router/.env')
+    if os.path.exists(env_path):
+        with open(env_path) as ef:
+            for line in ef:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                k, _, v = line.partition('=')
+                k = k.strip(); v = v.strip()
+                if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                    v = v[1:-1]
+                # Solo las variables del CLI (no la key del proxy por duplicado no es problema,
+                # pero evitamos meter KIMI etc.)
+                if k.startswith(('ANTHROPIC_', 'CLAUDE_CODE_')):
+                    env_cfg[k] = v
+    cfg['env'] = env_cfg
+    if os.environ.get('SETUP_DRY_RUN') == 'true':
+        print('[dry-run] env block: leido de .env (no escribo)')
+    else:
+        print('[ok] env block merged into settings.json from .env')
+except Exception as e:
+    print('[warn] no se pudo mergear env: ' + str(e))
+
+# Effort: 'auto' (deja que /effort o el CLI decidan) a menos que se pida max.
+cfg['effortLevel'] = 'auto'
+
 os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
-with open(cfg_path, 'w') as f:
-    json.dump(cfg, f, indent=2)
-print('[ok] hooks and statusline merged into settings.json')
+if os.environ.get('SETUP_DRY_RUN') == 'true':
+    print('[dry-run] se mergedaria settings.json (no escribo)')
+else:
+    with open(cfg_path, 'w') as f:
+        json.dump(cfg, f, indent=2)
+    print('[ok] hooks and statusline merged into settings.json')
 "
 fi
 
@@ -996,7 +1107,7 @@ if [ -n "$RC" ]; then
   sed -i '/router-config/d' "$RC"
   sed -i '/# Claude Code + DeepSeek Router/d' "$RC"
 
-  cat >> "$RC" <<SHELL
+  append_file "$RC" <<SHELL
 
 # Claude Code + DeepSeek Router
 export DEEPSEEK_API_KEY='$DS_KEY'
