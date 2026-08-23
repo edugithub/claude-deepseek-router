@@ -1,113 +1,123 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with the code in this repository.
 
 # Claude Code + DeepSeek Router
 
-## Proyecto
+## Project
 
-Proxy de enrutamiento inteligente para Claude Code CLI con modelos DeepSeek (v4-flash / v4-pro). Sin dependencias externas, solo Node.js nativo.
+Intelligent routing proxy for Claude Code CLI with DeepSeek models (v4-flash / v4-pro). No external dependencies, native Node.js only.
 
-- **Proxy**: `~/.claude-code-router/proxy.mjs` (~120 líneas, Node nativo HTTP)
-- **Config**: `~/.claude-code-router/config.json` — routing, providers, umbrales
-- **Setup**: `setup.sh` — instalación interactiva
-- **router-config** — CLI para consultar/modificar config en vivo
+- **Proxy**: `~/.claude-code-router/proxy.mjs` (~200+ lines, native Node HTTP)
+- **Config**: `~/.claude-code-router/config.json` — routing, providers, thresholds
+- **Credentials/config**: `~/.claude-code-router/.env` — source of truth, gitignored, read by the proxy and projected to `settings.json`
+- **Setup**: `setup.sh` — interactive installer
+- **router-config** — CLI to view/modify config live
 
-## Arquitectura
+## Architecture
 
 ```
 Claude Code CLI → proxy.mjs (127.0.0.1:3456) → DeepSeek API
                       │
-                      ├─ decide modelo según request (thinking, tamaño contexto)
-                      ├─ loggea modelo + tokens por request
-                      └─ lee config.json (recargado en cada request)
+                      ├─ decides model from the request (thinking, context size)
+                      ├─ logs model + tokens per request
+                      └─ reads config.json (reloaded on every request)
 ```
 
-El proxy se inyecta via `ANTHROPIC_BASE_URL=http://127.0.0.1:3456` y arranca automáticamente al abrir terminal (linea en `.zshrc`/`.bashrc`).
+The proxy is injected via `ANTHROPIC_BASE_URL=http://127.0.0.1:3456` and autostarts when the terminal opens (line in `.zshrc`/`.bashrc`).
 
-El codigo del proxy se genera desde `setup.sh` (here-doc), no hay un archivo independiente en el repo.
+The proxy code is generated from `setup.sh` (here-doc), there is no standalone file in the repo. The `setup.sh` here-doc and the runtime `~/.claude-code-router/proxy.mjs` must stay in sync.
 
 ## Routing
 
-| Condición | Modelo |
+| Condition | Model |
 |---|---|
-| Sin thinking, contexto < threshold | `deepseek-v4-flash` |
-| Thinking activado (`thinking.type = "enabled"`) | `deepseek-v4-pro` |
-| Contexto > threshold (`longContextThreshold`, default 30K) | `deepseek-v4-pro` |
+| No thinking, context < threshold | `deepseek-v4-flash` |
+| Thinking enabled (`thinking.type = "enabled"`, i.e. plan mode) | `deepseek-v4-pro` |
+| Context > threshold (`longContextThreshold`, default 500K) | `deepseek-v4-pro` |
 | Background | `deepseek-v4-pro` |
 
-El threshold se configura en `config.json` via `Router.longContextThreshold`. El README dice 60K como documentación pública; el valor real instalado por `setup.sh` es 30K.
+The threshold is configured in `config.json` via `Router.longContextThreshold`. The installed default is 500K.
 
-## Convenciones
+`setup.sh` reuses an existing `~/.claude-code-router/.env` as defaults, so a machine that already has it installs without re-entering credentials.
 
-- **Idioma**: README y mensajes al usuario en español
-- **Sin dependencias externas**: Solo Node.js nativo (http, fetch, fs, os, path)
-- **Hooks**: Se instalan en `~/.claude/hooks/` con `setup.sh`
-  - `on-stop.sh` — registra git diff + guarda metadata de sesión al cerrar
-  - `on-checkout.sh` — registra cambios antes de git checkout
-  - `on-session-start.sh` — avisa cambios pendientes + ofrece retomar sesiones
-- **Change log**: `.claude-change-log.md` — diff log de cambios entre sesiones. Solo registra cambios en archivos del proyecto (excluye cambios al propio `.claude-change-log.md`)
-- **Sesiones**: `.claude/sessions.json` — historial de sesiones (últimas 20)
-- **Logs del proxy**: `~/.claude-code-router/proxy.log` — escritura directa con `fs.writeSync` (sin buffering)
-- **Status line**: Muestra modelo, directorio, tokens totales (in/out), % de contexto con barra visual y nivel de esfuerzo
+## Conventions
 
-## Comandos comunes
+- **Language**: documentation (README, CLAUDE.md, setup.sh help) in English. Claude Code replies to the user in Spanish.
+- **No external dependencies**: Node.js native only (http, fetch, fs, os, path).
+- **Backup before changing files**: always back up any file before modifying it, and avoid leaving Claude in an inconsistent config state midway through changes.
+- **Hooks**: installed in `~/.claude/hooks/` by `setup.sh`
+  - `on-stop.sh` — records git diff + saves session metadata on close
+  - `on-checkout.sh` — records changes before git checkout
+  - `on-session-start.sh` — warns about pending changes + offers to resume sessions
+- **Change log**: `.claude-change-log.md` — diff log of changes between sessions. Only records changes to project files (excludes changes to `.claude-change-log.md` itself)
+- **Sessions**: `.claude/sessions.json` — session history (last 20)
+- **Proxy logs**: `~/.claude-code-router/proxy.log` — direct write with `fs.writeSync` (unbuffered)
+- **Status line**: shows model, directory, total tokens (in/out), % context with a visual bar, real effort, and balance
+
+## Common commands
 
 ```bash
-# Ver enrutamiento en vivo
-bash logs.sh              # últimas 20 líneas
-bash logs.sh -f           # seguir en vivo (tail -f)
-bash logs.sh -n 5         # solo 5 líneas
+# Watch routing live
+bash logs.sh              # last 20 lines
+bash logs.sh -f           # follow live (tail -f)
+bash logs.sh -n 5         # only 5 lines
 
-# Ver/configurar routing
-router-config                           # mostrar config completa
-router-config get Router.think          # modelo para thinking
+# View/configure routing
+router-config                           # show full config
+router-config get Router.think          # model for thinking
 router-config set Router.longContextThreshold 80000
-router-config provider deepseek         # ver proveedor
+router-config provider deepseek         # view provider
 router-config provider deepseek --api-base-url https://...
 
-# Rotar log del proxy sin reiniciar
+# Rotate the proxy log without restarting
 bash ~/.claude-code-router/rotate-logs.sh
 
-# Retomar sesión anterior
+# Resume previous session
 /resume <session-id>
 
-# Revisar cambios pendientes y actualizar CLAUDE.md
+# Review pending changes and update CLAUDE.md
 cat .claude-change-log.md
 ```
 
-## Archivos clave
+## Key files
 
-| Archivo | Propósito |
+| File | Purpose |
 |---|---|
-| `setup.sh` | Instalador completo (proxy, hooks, variables de shell, statusline) |
-| `logs.sh` | Visor de logs del proxy |
-| `README.md` | Documentación pública del proyecto |
-| `.gitignore` | Ignora `node_modules/`, logs, change log, sesiones |
-| `CLAUDE.md` | Este archivo — guía de trabajo |
-| `.claude-change-log.md` | Registro de cambios entre sesiones |
-| `.claude/sessions.json` | Metadata de sesiones anteriores (id, fecha, rama, título) |
-| `~/.claude-code-router/proxy.mjs` | Proxy runtime (generado por setup.sh) |
-| `~/.claude-code-router/config.json` | Config en JSON: providers, routing, umbrales |
-| `~/.claude-code-router/router-config` | CLI para gestionar config (Node.js script, generado por setup.sh) |
-| `~/.claude-code-router/logs.sh` | Visor de logs (copiado desde el repo) |
-| `~/.claude-code-router/rotate-logs.sh` | Rotación de log via SIGUSR1 |
-| `~/.claude/statusline.sh` | Status line en prompt (modelo, tokens, %contexto, esfuerzo) |
-| `~/.claude/settings.json` | Config de Claude Code (hooks, statusLine) |
+| `setup.sh` | Full installer (proxy, hooks, shell variables, statusline, skills, `.env`) |
+| `logs.sh` | Proxy log viewer |
+| `README.md` | Public project documentation (English) |
+| `CLAUDE.md` | This file — working guide |
+| `.gitignore` | Ignores `node_modules/`, logs, `.env`, change log, sessions |
+| `skills/` | Global skills sources (coding-workflow, refactoring, debugging) |
+| `.claude-change-log.md` | Change record between sessions |
+| `.claude/sessions.json` | Metadata of previous sessions (id, date, branch, title) |
+| `~/.claude-code-router/proxy.mjs` | Proxy runtime (generated by setup.sh) |
+| `~/.claude-code-router/config.json` | JSON config: providers, routing, thresholds |
+| `~/.claude-code-router/.env` | Credentials/config source of truth (gitignored) |
+| `~/.claude-code-router/router-config` | CLI to manage config (Node.js script, generated by setup.sh) |
+| `~/.claude-code-router/logs.sh` | Log viewer (copied from the repo) |
+| `~/.claude-code-router/rotate-logs.sh` | Log rotation via SIGUSR1 |
+| `~/.claude/statusline.sh` | Status line in the prompt (model, tokens, % context, effort, balance) |
+| `~/.claude/settings.json` | Claude Code config (hooks, statusLine, `env` block, effortLevel) |
+| `~/.claude/skills/` | Global skills (installed from `skills/`) |
 
-## Flujo de trabajo
+## Workflow
 
-1. `bash setup.sh` configura todo (API key, proxy, hooks, variables de entorno, statusline)
-2. El proxy arranca automáticamente al abrir terminal (o se puede iniciar manualmente)
-3. Claude Code se conecta al proxy via `ANTHROPIC_BASE_URL=http://127.0.0.1:3456`
-4. Al cerrar, `on-stop.sh` guarda metadata de sesión en `.claude/sessions.json`
-5. Al abrir, `on-session-start.sh` revisa `.claude-change-log.md` y ofrece retomar sesiones
+1. `bash setup.sh` configures everything (API key, proxy, hooks, env vars, statusline, skills)
+2. The proxy autostarts when the terminal opens (or can be started manually)
+3. Claude Code connects to the proxy via `ANTHROPIC_BASE_URL=http://127.0.0.1:3456`
+4. On close, `on-stop.sh` saves session metadata to `.claude/sessions.json`
+5. On open, `on-session-start.sh` checks `.claude-change-log.md` and offers to resume sessions
 
-## Detalles técnicos del proxy
+## Proxy technical details
 
-- **Re-escritura de modelo**: Inspecciona el body del request y sobreescribe `body.model` según las reglas de `config.json`
-- **Streaming**: Reenvía SSE (text/event-stream) leyendo con `getReader()`, parsea eventos para extraer token usage
-- **Timeout**: Configurable via `config.json` → `API_TIMEOUT_MS` (default 600s)
-- **Logging**: Escribe con `fs.writeSync` (sin buffering), rotación via `SIGUSR1`
-- **Config**: Carga `config.json` en cada request (no cachea), modificable en vivo con `router-config` y `router-config restart`
-- **Provider routing**: Busca el provider que contiene el modelo seleccionado; soporta múltiples providers
+- **Model rewriting**: inspects the request body and overwrites `body.model` per `config.json` rules
+- **Credentials**: `proxy.mjs` loads `DEEPSEEK_API_KEY` from `~/.claude-code-router/.env` (fallback to `process.env`), so it works without shell exports
+- **Streaming**: relays SSE (text/event-stream) reading with `getReader()`, parses events to extract token usage
+- **Timeout**: configurable via `config.json` → `API_TIMEOUT_MS` (default 600s)
+- **Logging**: writes with `fs.writeSync` (unbuffered), rotation via `SIGUSR1`
+- **Config**: loads `config.json` on each request (does not cache), modifiable live with `router-config` and `router-config restart`
+- **Balance**: polls `GET /user/balance` (free) on each request, writes `last-balance` for the status line
+- **Provider routing**: looks up the provider containing the selected model; supports multiple providers
+- **`--dry-run`**: safe — `setup.sh` writes nothing via `write_file`/`append_file` and the settings.json merge respects `$DRY_RUN`

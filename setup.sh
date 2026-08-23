@@ -3,36 +3,38 @@ set -e
 
 usage() {
   cat <<'EOF'
-Claude Code + DeepSeek Router — instalador
+Claude Code + DeepSeek Router — installer
 
-  bash setup.sh                            instalacion interactiva
-  bash setup.sh --help                     esta ayuda
-  bash setup.sh --no-hooks                 instalar sin hooks
-  bash setup.sh --dry-run                  mostrar que se instalaria
+  bash setup.sh                            interactive install
+  bash setup.sh --help                     this help
+  bash setup.sh --no-hooks                 install without hooks
+  bash setup.sh --dry-run                  show what would be installed
 
-Flags de configuracion (opcional):
-  --default-model <m>      modelo para requests normales (default: deepseek-v4-flash)
-  --think-model <m>        modelo para thinking (default: deepseek-v4-pro)
-  --longcontext-model <m>  modelo para contexto largo (default: deepseek-v4-pro)
-  --background-model <m>   modelo para tareas en background (default: deepseek-v4-pro)
-  --provider-url <url>     API base URL del provider
-  --provider-models <list> modelos del provider separados por coma
+Config flags (optional):
+  --default-model <m>      model for normal requests (default: deepseek-v4-flash)
+  --think-model <m>        model for thinking (default: deepseek-v4-pro)
+  --longcontext-model <m>  model for long context (default: deepseek-v4-pro)
+  --background-model <m>   model for background tasks (default: deepseek-v4-pro)
+  --provider-url <url>     provider API base URL
+  --provider-models <list> provider models, comma-separated
 
-Ejemplo:
+Example:
   bash setup.sh --think-model deepseek-v4-pro --default-model deepseek-v4-flash
 
-Que hace:
-  1. Crea el proxy de enrutamiento (~/.claude-code-router/proxy.mjs)
-  2. Configura variables en .zshrc/.bashrc (ANTHROPIC_BASE_URL, etc.)
-  3. Anade auto-arranque del proxy al abrir terminal
-  4. Instala router-config CLI para gestionar la configuracion
-  5. (Opcional) Instala 3 hooks:
-     - Stop: registra cambios al salir (por rama)
-     - SessionStart: avisa si hay cambios sin procesar para CLAUDE.md
-     - PreToolUse: registra cambios antes de git checkout
-  6. Instala skills globales en ~/.claude/skills/ (coding-workflow, refactoring, debugging)
+What it does:
+  1. Creates the routing proxy (~/.claude-code-router/proxy.mjs)
+  2. Configures variables in .zshrc/.bashrc (ANTHROPIC_BASE_URL, etc.)
+  3. Adds proxy auto-start when the terminal opens
+  4. Installs the router-config CLI to manage the configuration
+  5. (Optional) Installs 3 hooks:
+     - Stop: records changes on exit (per branch)
+     - SessionStart: warns if there are unprocessed changes for CLAUDE.md
+     - PreToolUse: records changes before git checkout
+  6. Installs global skills in ~/.claude/skills/ (coding-workflow, refactoring, debugging)
+  7. Writes ~/.claude-code-router/.env (credentials/config source) and projects its
+     env block into ~/.claude/settings.json
 
-Requisitos: Node.js >= 18, Claude Code CLI, DeepSeek API key
+Requirements: Node.js >= 18, Claude Code CLI, DeepSeek API key
 EOF
   exit 0
 }
@@ -58,17 +60,17 @@ while [ $# -gt 0 ]; do
     --background-model) BACKGROUND_MODEL="$2"; FLAGS_SET=true; shift 2 ;;
     --provider-url) PROVIDER_URL="$2"; FLAGS_SET=true; shift 2 ;;
     --provider-models) PROVIDER_MODELS="$2"; FLAGS_SET=true; shift 2 ;;
-    *) echo "Opcion desconocida: $1"; usage ;;
+    *) echo "Unknown option: $1"; usage ;;
   esac
 done
 
 echo "=== Claude Code + DeepSeek Router Setup ==="
-$DRY_RUN && echo "[DRY RUN — no se modificara nada]" && set +e
+$DRY_RUN && echo "[DRY RUN — nothing will be modified]" && set +e
 
 # Funciones de escritura que respetan --dry-run. Todos los heredocs (<<DELIM)
 # pasan por aqui: en dry-run se muestra que se haria pero NO se escribe.
-write_file() { if $DRY_RUN; then echo "[dry-run] se escribiria: $1"; else cat > "$1"; fi; }
-append_file() { if $DRY_RUN; then echo "[dry-run] se anadiria a: $1"; else cat >> "$1"; fi; }
+write_file() { if $DRY_RUN; then echo "[dry-run] would write: $1"; else cat > "$1"; fi; }
+append_file() { if $DRY_RUN; then echo "[dry-run] would append to: $1"; else cat >> "$1"; fi; }
 
 # ── .env fuente: reutilizar si ya existe ──────────────
 # En Camino B, ~/.claude-code-router/.env es la fuente de verdad. Si ya existe
@@ -96,14 +98,14 @@ load_env_defaults() {
 }
 load_env_defaults
 if $ENV_EXISTS && ! $FLAGS_SET; then
-  echo "→ .env existente detectado (~/.claude-code-router/.env). Reusando configuración."
+  echo "→ Existing .env detected (~/.claude-code-router/.env). Reusing configuration."
 fi
 
 # ── API key ──────────────────────────────────────────
 if $DRY_RUN; then
   DS_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
 elif $ENV_EXISTS && [ -n "$DS_KEY" ] && [ "$DS_KEY" != "sk-xxxxxxxxxxxxxxxxxxxxxxxx" ]; then
-  read -p "DeepSeek API key [ya en .env, Enter para mantener]: " INPUT
+  read -p "DeepSeek API key [already in .env, Enter to keep]: " INPUT
   [ -n "$INPUT" ] && DS_KEY="$INPUT"
 else
   read -p "DeepSeek API key: " DS_KEY
@@ -114,11 +116,11 @@ export DEEPSEEK_API_KEY="$DS_KEY"
 if ! $FLAGS_SET && ! $DRY_RUN; then
   echo ""
   echo "--- Routing configuration (Enter = defaults) ---"
-  read -p "  Modelo por defecto [$DEFAULT_MODEL]: " INPUT
+  read -p "  Default model [$DEFAULT_MODEL]: " INPUT
   [ -n "$INPUT" ] && DEFAULT_MODEL="$INPUT"
-  read -p "  Modelo para thinking [$THINK_MODEL]: " INPUT
+  read -p "  Thinking model [$THINK_MODEL]: " INPUT
   [ -n "$INPUT" ] && THINK_MODEL="$INPUT"
-  read -p "  Modelo para contexto largo [$LONGCONTEXT_MODEL]: " INPUT
+  read -p "  Long-context model [$LONGCONTEXT_MODEL]: " INPUT
   [ -n "$INPUT" ] && LONGCONTEXT_MODEL="$INPUT"
   read -p "  Provider API base URL [$PROVIDER_URL]: " INPUT
   [ -n "$INPUT" ] && PROVIDER_URL="$INPUT"
@@ -150,14 +152,14 @@ else
 fi
 if $NEED_NODE; then
   if $DRY_RUN; then
-    echo "[dry-run] se instalaria nvm + Node.js $NVM_LTS"
+    echo "[dry-run] would install nvm + Node.js $NVM_LTS"
   else
-    echo "Node.js >= 18 no encontrado (actual: $(node -v 2>/dev/null || echo 'none'))."
+    echo "Node.js >= 18 not found (current: $(node -v 2>/dev/null || echo 'none'))."
     if ! command -v nvm >/dev/null 2>&1 && [ ! -s "$HOME/.nvm/nvm.sh" ]; then
-      read -p "  Instalar nvm + Node.js $NVM_LTS? [S/n] " INSTALL_NVM
+      read -p "  Install nvm + Node.js $NVM_LTS? [S/n] " INSTALL_NVM
     else
       load_nvm
-      read -p "  Instalar Node.js $NVM_LTS via nvm? [S/n] " INSTALL_NVM
+      read -p "  Install Node.js $NVM_LTS via nvm? [S/n] " INSTALL_NVM
     fi
     if [ "$INSTALL_NVM" != "n" ] && [ "$INSTALL_NVM" != "N" ]; then
       if [ ! -s "$HOME/.nvm/nvm.sh" ]; then
@@ -165,34 +167,34 @@ if $NEED_NODE; then
         load_nvm
       fi
       if [ ! -s "$HOME/.nvm/nvm.sh" ]; then
-        echo "ERROR: No se pudo cargar nvm. Reinicia la terminal y vuelve a ejecutar setup.sh"
+        echo "ERROR: Could not load nvm. Restart the terminal and re-run setup.sh"
         exit 1
       fi
       nvm install "$NVM_LTS" && nvm use "$NVM_LTS" || true
     else
-      echo "Instala Node.js >= 18 manualmente y vuelve a ejecutar setup.sh"
-      echo "  Recomendado: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
+      echo "Install Node.js >= 18 manually and re-run setup.sh"
+      echo "  Recommended: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
       exit 1
     fi
   fi
 fi
-# Re-validate: solo cargar nvm si node no esta ya en PATH
+# Re-validate: only load nvm if node is not already in PATH
 if ! node -v >/dev/null 2>&1; then
   load_nvm
 fi
 NODE_MAJOR=$(node -v 2>/dev/null | sed 's/v//;s/\..*//')
 if [ -z "$NODE_MAJOR" ] || [ "$NODE_MAJOR" -lt 18 ]; then
-  echo "ERROR: Node.js >= 18 requerido (actual: $(node -v 2>/dev/null || echo 'none'))."
-  echo "  Instalalo via: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
+  echo "ERROR: Node.js >= 18 required (current: $(node -v 2>/dev/null || echo 'none'))."
+  echo "  Install via: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
   exit 1
 fi
 
 # ── jq ─────────────────────────────────────────────
 if ! command -v jq >/dev/null 2>&1; then
   if $DRY_RUN; then
-    echo "[dry-run] se instalaria jq"
+    echo "[dry-run] would install jq"
   else
-    echo "jq no encontrado. Instalando..."
+    echo "jq not found. Installing..."
     if command -v apt-get >/dev/null 2>&1; then
       sudo apt-get update -qq && sudo apt-get install -y jq
     elif command -v dnf >/dev/null 2>&1; then
@@ -202,7 +204,7 @@ if ! command -v jq >/dev/null 2>&1; then
     elif command -v brew >/dev/null 2>&1; then
       brew install jq
     else
-      echo "ERROR: No se pudo instalar jq automaticamente. Instalalo manualmente."
+      echo "ERROR: Could not install jq automatically. Install it manually."
       exit 1
     fi
   fi
@@ -212,9 +214,9 @@ fi
 load_nvm
 if ! command -v npm >/dev/null 2>&1; then
   if $DRY_RUN; then
-    echo "[dry-run] se instalaria npm"
+    echo "[dry-run] would install npm"
   else
-    echo "npm no encontrado. Instalando..."
+    echo "npm not found. Installing..."
     if command -v apt-get >/dev/null 2>&1; then
       sudo apt-get update -qq && sudo apt-get install -y npm
     elif command -v dnf >/dev/null 2>&1; then
@@ -224,7 +226,7 @@ if ! command -v npm >/dev/null 2>&1; then
     elif command -v brew >/dev/null 2>&1; then
       brew install npm
     else
-      echo "ERROR: No se pudo instalar npm automaticamente. Instalalo manualmente."
+      echo "ERROR: Could not install npm automatically. Install it manually."
       exit 1
     fi
   fi
@@ -234,20 +236,20 @@ fi
 load_nvm
 if ! command -v claude >/dev/null 2>&1; then
   if $DRY_RUN; then
-    echo "[dry-run] se instalaria Claude Code CLI"
+    echo "[dry-run] would install Claude Code CLI"
   else
     echo ""
-    echo "Claude Code CLI no encontrado."
-    echo "  Instalacion oficial: npm install -g @anthropic-ai/claude-code"
-    read -p "  Instalar ahora con npm? [S/n] " INSTALL_CLAUDE
+    echo "Claude Code CLI not found."
+    echo "  Official install: npm install -g @anthropic-ai/claude-code"
+    read -p "  Install now with npm? [S/n] " INSTALL_CLAUDE
     if [ "$INSTALL_CLAUDE" != "n" ] && [ "$INSTALL_CLAUDE" != "N" ]; then
       npm install -g @anthropic-ai/claude-code || {
-        echo "ERROR: Fallo la instalacion. Instalalo manualmente:"
+        echo "ERROR: Install failed. Install it manually:"
         echo "  npm install -g @anthropic-ai/claude-code"
         exit 1
       }
     else
-      echo "Instala Claude Code CLI manualmente y vuelve a ejecutar setup.sh"
+      echo "Install Claude Code CLI manually and re-run setup.sh"
       echo "  npm install -g @anthropic-ai/claude-code"
       exit 1
     fi
@@ -614,20 +616,20 @@ function parseValue(raw) {
 
 function help() {
   console.log([
-    "Uso: router-config <comando> [args]",
+    "Usage: router-config <command> [args]",
     "",
-    "Comandos:",
-    "  (sin comando)                    Mostrar config actual",
-    "  get <key.dotted.path>            Obtener un valor (ej: Router.default)",
-    "  set <key.dotted.path> <valor>    Establecer un valor",
-    "  help                             Mostrar esta ayuda",
-    "  restart                          Reiniciar el proxy (aplica cambios de config)",
+    "Commands:",
+    "  (no command)                    Show current config",
+    "  get <key.dotted.path>           Get a value (e.g. Router.default)",
+    "  set <key.dotted.path> <value>   Set a value",
+    "  help                            Show this help",
+    "  restart                         Restart the proxy (apply config changes)",
     "",
-    "  provider <nombre>                Mostrar proveedor",
-    "  provider <nombre> --api-base-url <url> [--models \"m1,m2\"]",
-    "                                   Actualizar o crear proveedor",
+    "  provider <name>                 Show provider",
+    "  provider <name> --api-base-url <url> [--models \"m1,m2\"]",
+    "                                  Update or create provider",
     "",
-    "Ejemplos:",
+    "Examples:",
     "  router-config",
     '  router-config get Router.think',
     '  router-config set Router.think "deepseek,deepseek-v4-pro"',
@@ -647,7 +649,7 @@ function main() {
 
   if (cmd === "get") {
     const key = args[1];
-    if (!key) { console.error("Uso: router-config get <key>"); process.exit(1); }
+    if (!key) { console.error("Usage: router-config get <key>"); process.exit(1); }
     const val = getByPath(config, key);
     if (val === undefined) { console.error("Key not found: " + key); process.exit(1); }
     console.log(typeof val === "object" ? JSON.stringify(val, null, 2) : val);
@@ -657,7 +659,7 @@ function main() {
   if (cmd === "set") {
     const key = args[1];
     const raw = args.slice(2).join(" ");
-    if (!key || !raw) { console.error("Uso: router-config set <key> <valor>"); process.exit(1); }
+    if (!key || !raw) { console.error("Usage: router-config set <key> <value>"); process.exit(1); }
     setByPath(config, key, parseValue(raw));
     writeConfig(config);
     console.log("[ok] " + key + " = " + JSON.stringify(getByPath(config, key)));
@@ -666,7 +668,7 @@ function main() {
 
   if (cmd === "provider") {
     const name = args[1];
-    if (!name) { console.error("Uso: router-config provider <nombre> [--api-base-url ...] [--models ...]"); process.exit(1); }
+    if (!name) { console.error("Usage: router-config provider <name> [--api-base-url ...] [--models ...]"); process.exit(1); }
     const { providers, idx } = findProvider(config, name);
     const apiIdx = args.indexOf("--api-base-url");
     const modIdx = args.indexOf("--models");
@@ -683,7 +685,7 @@ function main() {
     if (apiIdx !== -1) p.api_base_url = args[apiIdx + 1];
     if (modIdx !== -1) p.models = args[modIdx + 1].split(",").map((s) => s.trim());
     writeConfig(config);
-    console.log("[ok] provider " + name + " actualizado:\n" + JSON.stringify(p, null, 2));
+    console.log("[ok] provider " + name + " updated:\n" + JSON.stringify(p, null, 2));
     return;
   }
 
@@ -694,11 +696,11 @@ function main() {
     } catch (_) { /* proxy not running */ }
     const proxyPath = path.join(os.homedir(), ".claude-code-router", "proxy.mjs");
     execSync("node " + proxyPath + " &", { stdio: "ignore" });
-    console.log("[ok] proxy reiniciado");
+    console.log("[ok] proxy restarted");
     return;
   }
 
-  console.error("Comando desconocido: " + cmd + " — usa: router-config help");
+  console.error("Unknown command: " + cmd + " — use: router-config help");
   process.exit(1);
 }
 main();
@@ -848,8 +850,8 @@ CHANGELOG="$ROOT/.claude-change-log.md"
 SESSIONS_FILE="$ROOT/.claude/sessions.json"
 
 if [ -f "$CHANGELOG" ] && [ "$(wc -l < "$CHANGELOG")" -gt 0 ]; then
-  echo "AVISO: Hay cambios registrados en .claude-change-log.md."
-  echo "Revisa el change log y actualiza CLAUDE.md con lo relevante."
+  echo "WARNING: Changes are recorded in .claude-change-log.md."
+  echo "Review the change log and update CLAUDE.md with anything relevant."
 fi
 
 CURRENT_SID=$(echo "$STDIN" | python3 -c "
@@ -902,8 +904,8 @@ for s in sessions:
 
 if valid:
     print()
-    print('*** SESIONES ANTERIORES ***')
-    print('Como PRIMER mensaje, usa la herramienta AskUserQuestion con estas opciones:')
+    print('*** PREVIOUS SESSIONS ***')
+    print('As the FIRST message, use the AskUserQuestion tool with these options:')
     print()
     opts = []
     for s in valid[:3]:
@@ -914,13 +916,13 @@ if valid:
             'description': f\"{s['date']} - {s.get('branch', '?')}\",
             'resume_id': sid
         })
-    print('PREGUNTA: \"Quieres retomar alguna sesion anterior?\"')
-    print('OPCIONES: (header obligatorio, max 4 items)')
+    print('QUESTION: \"Do you want to resume a previous session?\"')
+    print('OPTIONS: (mandatory header, max 4 items)')
     for i, o in enumerate(opts):
         print(f\"  {i+1}. {o['label']} ({o['description']}) -> /resume {o['resume_id']}\")
-    print(f\"  {len(opts)+1}. No, empezar nueva sesion\")
+    print(f\"  {len(opts)+1}. No, start a new session\")
     print()
-    print('IMPORTANTE: Usa AskUserQuestion YA MISMO, no esperes a que el usuario escriba.')
+    print('IMPORTANT: Use AskUserQuestion RIGHT NOW, do not wait for the user to type.')
 " 2>/dev/null || true
 HOOK
   chmod +x ~/.claude/hooks/on-session-start.sh
@@ -1085,11 +1087,11 @@ fi
 SKILLS_SRC="$(dirname "$0")/skills"
 if [ -d "$SKILLS_SRC" ]; then
   if $DRY_RUN; then
-    echo "[dry-run] se instalarian skills globales en ~/.claude/skills/"
+    echo "[dry-run] would install global skills to ~/.claude/skills/"
   else
     mkdir -p ~/.claude/skills
     cp -R "$SKILLS_SRC"/. ~/.claude/skills/
-    echo "[ok] skills globales instalados en ~/.claude/skills/"
+    echo "[ok] global skills installed to ~/.claude/skills/"
   fi
 fi
 
@@ -1123,5 +1125,5 @@ fi
 ss -tln | grep -q 3456 || node ~/.claude-code-router/proxy.mjs &
 
 echo ""
-echo "Listo. Abre una terminal nueva o ejecuta: source $RC"
-echo "Logs del proxy: tail -f ~/.claude-code-router/proxy.log"
+echo "Done. Open a new terminal or run: source $RC"
+echo "Proxy logs: tail -f ~/.claude-code-router/proxy.log"

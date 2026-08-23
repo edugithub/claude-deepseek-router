@@ -1,38 +1,38 @@
 # Claude Code + DeepSeek Router
 
-Proxy de enrutamiento inteligente para [Claude Code CLI](https://github.com/anthropics/claude-code) con modelos DeepSeek (v4-flash / v4-pro). Sin dependencias externas, solo Node.js nativo.
+Intelligent routing proxy for [Claude Code CLI](https://github.com/anthropics/claude-code) using DeepSeek models (v4-flash / v4-pro). No external dependencies, native Node.js only.
 
-## Cómo funciona
+## How it works
 
 ```
 claude → proxy (127.0.0.1:3456) → DeepSeek API
-                                   ├─ v4-flash (tareas simples)
-                                   └─ v4-pro  (thinking / plan mode / contexto largo)
+                                   ├─ v4-flash (simple tasks)
+                                   └─ v4-pro  (thinking / plan mode / long context)
 ```
 
-El proxy inspecciona cada request y decide el modelo:
+The proxy inspects each request and decides the model:
 
-| Condición | Modelo |
+| Condition | Model |
 |---|---|
-| Primera llamada (sin uso real aún) | `deepseek-v4-flash` |
-| Contexto real < `longContextThreshold` (500K) | `deepseek-v4-flash` |
-| Contexto real > `longContextThreshold` (500K) | `deepseek-v4-pro` |
-| Plan mode activo (`/plan`) | `deepseek-v4-pro` + `reasoning.effort` |
-| Tareas en background | `deepseek-v4-pro` |
+| First call (no real usage yet) | `deepseek-v4-flash` |
+| Real context < `longContextThreshold` (500K) | `deepseek-v4-flash` |
+| Real context > `longContextThreshold` (500K) | `deepseek-v4-pro` |
+| Plan mode active (`/plan`) | `deepseek-v4-pro` + `reasoning.effort` |
+| Background tasks | `deepseek-v4-pro` |
 
-### Detalles de comportamiento
+### Behavior details
 
-- **Contexto real por sesión**: el proxy suma `input + cache_read + cache_creation` del `usage` que devuelve DeepSeek en cada respuesta, y lo guarda por `x-claude-code-session-id`. Así el routing usa el contexto *real* (no estimado) tras la primera respuesta. Al arrancar (sin dato aún) va a `flash`.
-- **Thinking solo en plan mode**: con `Router.thinking = "plan"`, el proxy solo activa razonamiento cuando detecta el marcador `"Plan mode is active"` en los últimos mensajes (`reasoning.effort = "high"`). Fuera de plan mode desactiva thinking (`thinking.type = "disabled"`) para que Flash no piense.
-- **Umbral real (500K)**: el `longContextThreshold` instalado por defecto es **500.000** tokens (no 60K). Se ajusta con `router-config set Router.longContextThreshold`.
+- **Per-session real context**: the proxy sums `input + cache_read + cache_creation` from the `usage` DeepSeek returns in each response, and stores it keyed by `x-claude-code-session-id`. Routing therefore uses the *real* context (not estimated) after the first response. On startup (no data yet) it goes to `flash`.
+- **Thinking only in plan mode**: with `Router.thinking = "plan"`, the proxy only enables reasoning when it detects the marker `"Plan mode is active"` in the most recent messages (`reasoning.effort = "high"`). Outside plan mode it disables thinking (`thinking.type = "disabled"`) so Flash does not think.
+- **Real threshold (500K)**: the `longContextThreshold` installed by default is **500,000** tokens (not 60K). Tune it with `router-config set Router.longContextThreshold`.
 
-## Requisitos
+## Requirements
 
 - **Node.js >= 18**
-- **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/overview)** instalado
-- **DeepSeek API key** — [obtener aquí](https://platform.deepseek.com/api_keys)
+- **[Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code/overview)** installed
+- **DeepSeek API key** — [get one here](https://platform.deepseek.com/api_keys)
 
-## Instalación
+## Installation
 
 ```bash
 git clone https://github.com/edugithub/claude-deepseek-router.git
@@ -40,113 +40,114 @@ cd claude-deepseek-router
 bash setup.sh
 ```
 
-Te pedirá la API key de DeepSeek y configura todo automáticamente (proxy, hooks, variables de shell, status line y skills globales).
+It will ask for your DeepSeek API key and configure everything automatically (proxy, hooks, shell variables, status line, and global skills).
 
-## Qué instala
+## What it installs
 
-| Archivo | Propósito |
+| File | Purpose |
 |---|---|
-| `~/.claude-code-router/proxy.mjs` | Proxy (~235 líneas, Node nativo) |
-| `~/.claude-code-router/proxy.log` | Logs: modelo + tokens por request (escritura directa, sin buffering) |
-| `~/.claude-code-router/config.json` | Configuración de providers y routing |
-| `~/.claude-code-router/router-config` | CLI para consultar/modificar config.json en vivo |
-| `~/.claude-code-router/logs.sh` | Visor de logs del proxy (alias de `logs.sh` en el repo) |
-| `~/.claude-code-router/rotate-logs.sh` | Rotación del log vía SIGUSR1 |
-| `~/.claude-code-router/last-model/<session-id>` | Último modelo por sesión (para status line) |
-| `~/.claude-code-router/last-effort/<session-id>` | Effort real usado por sesión (para status line) |
-| `~/.claude-code-router/last-balance` | Saldo de DeepSeek cacheado (consulta automática) |
-| `~/.claude/hooks/on-stop.sh` | Hook Stop: registra git diff por rama + metadata de sesión al salir |
-| `~/.claude/hooks/on-checkout.sh` | Hook PreToolUse: registra cambios antes de git checkout |
-| `~/.claude/hooks/on-session-start.sh` | Hook SessionStart: avisa cambios + sesiones para retomar |
-| `~/.claude/statusline.sh` | Status line: rama, contexto, tokens, effort, modelo, balance |
-| `~/.claude/settings.json` | Config de Claude Code + hooks + status line |
-| `~/.claude/skills/` | Skills globales (coding-workflow, refactoring, debugging) |
-| `$PROJECT/.claude/sessions.json` | Metadata de sesiones (id, fecha, rama, título) |
-| Variables en `.zshrc`/`.bashrc` | `ANTHROPIC_BASE_URL`, auto-arranque del proxy, `PATH` |
+| `~/.claude-code-router/proxy.mjs` | Proxy (~235 lines, native Node) |
+| `~/.claude-code-router/proxy.log` | Logs: model + tokens per request (direct write, unbuffered) |
+| `~/.claude-code-router/config.json` | Providers and routing configuration |
+| `~/.claude-code-router/router-config` | CLI to view/modify config.json live |
+| `~/.claude-code-router/logs.sh` | Proxy log viewer (alias of `logs.sh` in the repo) |
+| `~/.claude-code-router/rotate-logs.sh` | Log rotation via SIGUSR1 |
+| `~/.claude-code-router/last-model/<session-id>` | Last model per session (for the status line) |
+| `~/.claude-code-router/last-effort/<session-id>` | Real effort used per session (for the status line) |
+| `~/.claude-code-router/last-balance` | Cached DeepSeek balance (automatic polling) |
+| `~/.claude-code-router/.env` | Source of truth for credentials/config (gitignored) |
+| `~/.claude/hooks/on-stop.sh` | Stop hook: logs git diff per branch + session metadata on exit |
+| `~/.claude/hooks/on-checkout.sh` | PreToolUse hook: logs changes before git checkout |
+| `~/.claude/hooks/on-session-start.sh` | SessionStart hook: warns about changes + sessions to resume |
+| `~/.claude/statusline.sh` | Status line: branch, context, tokens, effort, model, balance |
+| `~/.claude/settings.json` | Claude Code config + hooks + status line + `env` block |
+| `~/.claude/skills/` | Global skills (coding-workflow, refactoring, debugging) |
+| `$PROJECT/.claude/sessions.json` | Session metadata (id, date, branch, title) |
+| Variables in `.zshrc`/`.bashrc` | Auto-start of the proxy, `PATH` |
 
-## Uso diario
+## Daily use
 
-Abrir terminal y Claude Code normalmente. El proxy arranca solo.
+Open a terminal and run Claude Code normally. The proxy autostarts.
 
 ```bash
 claude
 ```
 
-Para ver el routing en vivo:
+To watch routing live:
 
 ```bash
-bash logs.sh                      # últimas 20 líneas (desde el repo)
-bash ~/.claude-code-router/logs.sh  # o desde donde estés
-bash logs.sh -f                   # seguir en vivo (tail -f)
-bash logs.sh -n 5                 # solo 5 líneas
+bash logs.sh                      # last 20 lines (from the repo)
+bash ~/.claude-code-router/logs.sh  # or from anywhere
+bash logs.sh -f                   # follow live (tail -f)
+bash logs.sh -n 5                 # only 5 lines
 ```
 
-Salida típica:
+Typical output:
 
 ```
 [proxy] >> deepseek-v4-flash | in:1234 out:567 cache:0
 [proxy] >> deepseek-v4-pro  | in:8921 out:2341 cache:123
 ```
 
-Columnas: `modelo | in:tokens_entrada out:tokens_salida cache:tokens_cache_hit`
+Columns: `model | in:input_tokens out:output_tokens cache:cache_hit_tokens`
 
 ## Status line
 
-El instalador configura una **status line** en el prompt de Claude Code con la información de la sesión en tiempo real:
+The installer configures a **status line** in the Claude Code prompt showing live session info:
 
 ```
 ⎇ main  ▰▰▱▱▱▱▱▱▱▱  19%  ·  15.0k in  3.5k out  ·  -  [deepseek-v4-flash]  ·  $ 5.71
 ```
 
-| Componente | Descripción |
+| Component | Description |
 |---|---|
-| `⎇ main` | Rama git actual (con `⊞` si es un worktree) |
-| `▰▰▱▱▱▱▱▱▱▱  19%` | Porcentaje de uso de la ventana de contexto + barra visual de 10 bloques |
-| `15.0k in  3.5k out` | Tokens totales de entrada/salida en la sesión (formateados a k) |
-| `-` | Effort real usado por el proxy (`R:high` en plan mode, `no-thinking` fuera) |
-| `[deepseek-v4-flash]` | Modelo real enrutado por el proxy (lee de `last-model/<sid>`) |
-| `$ 5.71` | Saldo de DeepSeek en USD (lee de `last-balance`) |
+| `⎇ main` | Current git branch (with `⊞` if it is a worktree) |
+| `▰▰▱▱▱▱▱▱▱▱  19%` | Context window usage percentage + 10-block visual bar |
+| `15.0k in  3.5k out` | Total input/output tokens in the session (k-formatted) |
+| `-` | Real effort used by the proxy (`R:high` in plan mode, `no-thinking` outside) |
+| `[deepseek-v4-flash]` | Real model routed by the proxy (reads `last-model/<sid>`) |
+| `$ 5.71` | DeepSeek balance in USD (reads `last-balance`) |
 
-> **Nota:** El modelo que muestra refleja la decisión de routing del proxy en tiempo real (flash para requests simples, pro para plan mode/contexto largo), no el modelo configurado en `ANTHROPIC_MODEL`. El balance se actualiza automáticamente en cada request (consulta gratuita de la API, cacheada en `last-balance`).
+> **Note:** The shown model reflects the proxy's real-time routing decision (flash for simple requests, pro for plan mode/long context), not the model set in `ANTHROPIC_MODEL`. The balance updates automatically on each request (a free API call, cached in `last-balance`).
 
-## Balance de DeepSeek
+## DeepSeek balance
 
-El proxy consulta el [endpoint de saldo](https://api-docs.deepseek.com/api/get-user-balance/) de DeepSeek automáticamente:
+The proxy polls the [balance endpoint](https://api-docs.deepseek.com/api/get-user-balance/) automatically:
 
-- Se dispara en **cada request** (cada prompt) en background, sin bloquear el enrutado.
-- Es un endpoint **gratuito** (no consume tokens del modelo), por lo que no hay throttling.
-- Escribe el resultado a `~/.claude-code-router/last-balance`, que la status line lee localmente (microsegundos, sin red).
-- Si falla (p. ej. HTTP 500), escribe una línea `[proxy] balance warn` en el log y **no rompe el proxy**.
+- Fires on **each request** (each prompt) in the background, without blocking routing.
+- It is a **free** endpoint (does not consume model tokens), so there is no throttling.
+- Writes the result to `~/.claude-code-router/last-balance`, which the status line reads locally (microseconds, no network).
+- On failure (e.g. HTTP 500) it writes a `[proxy] balance warn` line to the log and **does not break the proxy**.
 
-## Skills globales
+## Global skills
 
-`setup.sh` copia los skills del repo a `~/.claude/skills/`, disponibles en **todos** los proyectos:
+`setup.sh` copies the skills in the repo to `~/.claude/skills/`, available in **all** projects:
 
-| Skill | Propósito |
+| Skill | Purpose |
 |---|---|
-| `coding-workflow` | Workflow de implementación: clasificación de tarea, cambio mínimo, consistencia multi-fichero, verificación y completion check |
-| `refactoring` | Protocolo de refactor que preserva comportamiento |
-| `debugging` | Distinguir root cause de síntoma, trazar el path, corregir lo mínimo |
+| `coding-workflow` | Implementation workflow: task classification, minimal change, multi-file consistency, verification, and completion check |
+| `refactoring` | Refactoring protocol that preserves behavior |
+| `debugging` | Distinguish root cause from symptom, trace the path, fix the minimum |
 
-Estos skills **reducen los fallos de proceso** (especialmente en Flash con thinking desactivado y output reducido), pero **no deciden el modelo** — eso lo hace siempre el proxy.
+These skills **reduce process failures** (especially on Flash with thinking off and reduced output), but they **do not decide the model** — the proxy always does.
 
 ## router-config CLI
 
-`router-config` permite consultar y modificar la configuración del proxy en vivo.
+`router-config` lets you view and modify the proxy configuration live.
 
 ```bash
-router-config                              # Mostrar config actual
-router-config get Router.think             # Ver modelo para thinking
-router-config set Router.think "deepseek,deepseek-v4-pro"  # Cambiarlo
-router-config set Router.longContextThreshold 500000       # Umbral de contexto
-router-config provider deepseek            # Ver proveedor
+router-config                              # Show current config
+router-config get Router.think             # See thinking model
+router-config set Router.think "deepseek,deepseek-v4-pro"  # Change it
+router-config set Router.longContextThreshold 500000       # Context threshold
+router-config provider deepseek            # View provider
 router-config provider deepseek --api-base-url https://... --models "flash,pro"
-router-config restart                      # Reiniciar el proxy (aplica cambios)
+router-config restart                      # Restart the proxy (apply changes)
 ```
 
-### Configuración inicial con flags
+### Initial configuration with flags
 
-`setup.sh` acepta flags para personalizar el routing sin intervención interactiva:
+`setup.sh` accepts flags to customize routing without interactive input:
 
 ```bash
 bash setup.sh \
@@ -158,11 +159,11 @@ bash setup.sh \
   --provider-models "deepseek-v4-flash,deepseek-v4-pro"
 ```
 
-Sin flags, el instalador pregunta interactivamente los valores (pulsar Enter usa el default).
+Without flags, the installer asks interactively (pressing Enter uses the default).
 
-## Sesiones
+## Sessions
 
-Al cerrar Claude Code, el hook Stop guarda metadata de la sesión en `.claude/sessions.json`:
+On exit, the Stop hook stores session metadata in `.claude/sessions.json`:
 
 ```json
 [
@@ -175,28 +176,30 @@ Al cerrar Claude Code, el hook Stop guarda metadata de la sesión en `.claude/se
 ]
 ```
 
-Al abrir una nueva sesión en el mismo proyecto, el hook SessionStart muestra las sesiones recientes y Claude Code pregunta si quieres retomar alguna.
+On opening a new session in the same project, the SessionStart hook shows recent sessions and Claude Code asks whether you want to resume one.
 
 ```
-Sesiones recientes en este proyecto:
+Recent sessions in this project:
   - [2026-05-23 16:30] Fix login button (main)  /resume abc12345
 ```
 
-Usa `/resume <id>` para retomar una sesión anterior.
+Use `/resume <id>` to resume a previous session.
 
-## Credenciales
+## Credentials
 
-Solo necesitas la **API key de DeepSeek**. Se pide durante la instalación y se guarda como variable de entorno en `~/.zshrc`/`~/.bashrc` (y la usa el proxy desde `DEEPSEEK_API_KEY` en cada request). **Nunca** se escribe en `config.json` ni en archivos del proyecto.
+You only need the **DeepSeek API key**. It is asked during installation and stored in `~/.claude-code-router/.env` (which the proxy reads) plus the `env` block of `~/.claude/settings.json` for Claude Code. It is **never** written to `config.json` or to files in the repo.
 
-> **Aviso de seguridad:** no uses la key en permisos de `~/.claude/settings.local.json`. Un `PermissionRule` que contenga la key en texto plano la expone en ficheros locales y logs; usa variables de entorno (`DEEPSEEK_API_KEY`) en su lugar. Si ya está ahí, rótala.
+> **Security warning:** do not put the key in permissions of `~/.claude/settings.local.json`. A `PermissionRule` embedding the key in plain text exposes it in local files and logs; use the environment (`DEEPSEEK_API_KEY`) instead. If it is already there, rotate it.
 
-## Portar a otra máquina
+## Porting to another machine
 
 ```bash
 git clone https://github.com/edugithub/claude-deepseek-router.git
 cd claude-deepseek-router && bash setup.sh
 ```
 
-## Licencia
+`setup.sh` reuses an existing `~/.claude-code-router/.env` as defaults (it will not ask again if one is present), so any machine that already has the `.env` installs without re-entering credentials.
 
-Dominio público. Sin restricciones.
+## License
+
+Public domain. No restrictions.
